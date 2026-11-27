@@ -44,6 +44,14 @@ try:
         page.click("#undo")
         expect(page.locator("#npts")).to_have_text("26")
         page.locator('nav [data-go="sim"]').click()
+        page.select_option("#durationMode","duration")
+        page.fill("#durationMinutes","14")
+        page.fill("#durationSeconds","30")
+        assert abs(float(page.locator("#pace").input_value())-7.25)<0.00001
+        page.fill("#durationMinutes","12")
+        page.fill("#durationSeconds","0")
+        expect(page.locator("#pace")).to_have_value("6")
+        page.select_option("#durationMode","pace")
         page.fill("#count","3")
         page.fill("#scenarioDate","2030-12-31")
         page.fill("#scenarioTime","23:55")
@@ -122,6 +130,26 @@ try:
         assert xml.find(".//t:DistanceMeters", ns).text == "50"
         assert not xml.findall(".//t:Position", ns)
         assert "SYNTHETIC_RESEARCH" in "".join(xml.itertext())
+        # Verify a second experiment cannot replace the first archive.
+        expect(page.locator("#projectHistory option")).to_have_count(1)
+        page.click("#projectBackup")
+        backup = json.loads(base64.b64decode(page.evaluate("window.__exports.at(-1).data")))
+        assert backup["synthetic"] is True and len(backup["projects"]) == 1
+        page.locator('nav [data-go="sim"]').click()
+        page.fill("#count","1")
+        page.click("#generate")
+        expect(page.locator("#summaryBody tr")).to_have_count(1)
+        page.locator('nav [data-go="files"]').click()
+        expect(page.locator("#projectHistory option")).to_have_count(2)
+        page.select_option("#projectHistory",backup["projects"][0]["id"])
+        page.click("#projectOpen")
+        expect(page.locator("#summaryBody tr")).to_have_count(3)
+        page.locator('nav [data-go="files"]').click()
+        page.locator("#projectImportText").locator("xpath=..").locator("summary").click()
+        page.fill("#projectImportText",json.dumps(backup))
+        page.click("#projectImport")
+        expect(page.locator("#projectMessage")).to_contain_text("导入 0 个")
+        expect(page.locator("#projectHistory option")).to_have_count(2)
         assert not errors, errors
         browser.close()
 finally:
