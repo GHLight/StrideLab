@@ -4,6 +4,28 @@ const VERSION='0.1.0', DECLARATION='本文件包为程序生成的合成研究�
 function rng(seed){let a=seed>>>0;return ()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;};}
 function normal(r){return Math.sqrt(-2*Math.log(Math.max(r(),1e-12)))*Math.cos(2*Math.PI*r());}
 function standardTrack(){let p=[],r=36.5,l=(400-2*Math.PI*r)/2;for(let i=0;i<=12;i++){let a=Math.PI+i*Math.PI/12;p.push([r*Math.cos(a),-l/2+r*Math.sin(a)]);}for(let i=0;i<=12;i++){let a=i*Math.PI/12;p.push([r*Math.cos(a),l/2+r*Math.sin(a)]);}return p;}
+// Shape-only normalization. The local template retains no geographic anchor.
+function referenceTrackShape(marks){
+ if(!Array.isArray(marks)||marks.length<3||marks.length>120||!marks.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&Math.abs(p[0])<=85&&Math.abs(p[1])<=180))throw Error('请沿场地周边选择至少3个有效参考点，推荐4–8个');
+ const lat=marks.reduce((a,p)=>a+p[0],0)/marks.length,lon=marks[0][1],rad=Math.PI/180,scale=6371008.8*rad;
+ const xy=marks.map(p=>[(((p[1]-lon+540)%360)-180)*Math.cos(lat*rad)*scale,(p[0]-lat)*scale]);
+ const mean=[xy.reduce((a,p)=>a+p[0],0)/xy.length,xy.reduce((a,p)=>a+p[1],0)/xy.length];
+ let xx=0,yy=0,xycov=0;
+ for(const p of xy){const x=p[0]-mean[0],y=p[1]-mean[1];xx+=x*x;yy+=y*y;xycov+=x*y;}
+ const theta=.5*Math.atan2(2*xycov,xx-yy),cs=Math.cos(theta),sn=Math.sin(theta);
+ const axes=xy.map(p=>[(p[0]-mean[0])*cs+(p[1]-mean[1])*sn,-(p[0]-mean[0])*sn+(p[1]-mean[1])*cs]);
+ const span=i=>Math.max(...axes.map(p=>p[i]))-Math.min(...axes.map(p=>p[i]));
+ const major=Math.max(span(0),span(1)),minor=Math.min(span(0),span(1));
+ if(major<5||major>1000||minor<2||minor/major<.15)throw Error('参考点范围不足或过大，请在环形场地周边分散标点');
+ const ratio=Math.max(.35,Math.min(.98,minor/major));
+ const radius=100*ratio,halfStraight=100*(1-ratio),raw=[];
+ for(let i=0;i<=24;i++){const a=Math.PI+i*Math.PI/24;raw.push([radius*Math.cos(a),-halfStraight+radius*Math.sin(a)]);}
+ for(let i=0;i<=24;i++){const a=i*Math.PI/24;raw.push([radius*Math.cos(a),halfStraight+radius*Math.sin(a)]);}
+ const factor=400/geometry(raw,true).len;
+ const points=raw.map(p=>p.map(v=>v*factor));
+ if(Math.max(...points.map(p=>Math.abs(p[1])))>100)for(const p of points){const x=p[0];p[0]=p[1];p[1]=-x;}
+ return {points,closed:true,nominal_m:400,shape_ratio:ratio,source:'normalized_reference_shape'};
+}
 function geometry(points,closed){if(!Array.isArray(points)||points.length<(closed?3:2))throw Error('参考点数量不足');let seg=[],len=0;for(let i=0;i<points.length-(closed?0:1);i++){let a=points[i],b=points[(i+1)%points.length],d=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!Number.isFinite(d)||d<.05)throw Error('节点重合或非法');seg.push({a,b,d,start:len});len+=d;}if(len<5)throw Error('路线过短');return {seg,len,closed};}
 function crossing(points,closed){let n=points.length-(closed?0:1),out=0;const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);for(let i=0;i<n;i++)for(let j=i+2;j<n;j++){if(closed&&i===0&&j===n-1)continue;let a=points[i],b=points[(i+1)%points.length],c=points[j],d=points[(j+1)%points.length];if(cross(a,b,c)*cross(a,b,d)<0&&cross(c,d,a)*cross(c,d,b)<0)out++;}return out;}
 function pos(g,s){s=g.closed?((s%g.len)+g.len)%g.len:Math.max(0,Math.min(g.len,s));let v=g.seg.find(q=>s<=q.start+q.d)||g.seg.at(-1),f=(s-v.start)/v.d;return [v.a[0]+f*(v.b[0]-v.a[0]),v.a[1]+f*(v.b[1]-v.a[1])];}
@@ -14,5 +36,5 @@ let e=c.noise===0?[0,0]:[normal(r)*c.noise/Math.SQRT2,normal(r)*c.noise/Math.SQR
 function csv(rows){if(!rows.length)return '';let keys=Object.keys(rows[0]);return keys.join(',')+'\n'+rows.map(r=>keys.map(k=>typeof r[k]==='number'?String(Math.round(r[k]*1e6)/1e6):r[k]??'').join(',')).join('\n')+'\n';}
 const table=Array.from({length:256},(_,i)=>{for(let j=0;j<8;j++)i=(i&1)?0xedb88320^(i>>>1):i>>>1;return i>>>0;});function crc32(bytes){let c=0xffffffff;for(let b of bytes)c=table[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0;}
 function zip(files){let enc=new TextEncoder(),chunks=[],central=[],offset=0,clen=0;const make=n=>new Uint8Array(n),w=(a,p,n,v)=>{let d=new DataView(a.buffer);n===2?d.setUint16(p,v,true):d.setUint32(p,v,true);};for(let [name,value] of Object.entries(files)){let n=enc.encode(name),b=typeof value==='string'?enc.encode(value):value,crc=crc32(b),h=make(30+n.length);w(h,0,4,0x04034b50);w(h,4,2,20);w(h,6,2,2048);w(h,12,2,33);w(h,14,4,crc);w(h,18,4,b.length);w(h,22,4,b.length);w(h,26,2,n.length);h.set(n,30);chunks.push(h,b);let ch=make(46+n.length);w(ch,0,4,0x02014b50);w(ch,4,2,20);w(ch,6,2,20);w(ch,8,2,2048);w(ch,14,2,33);w(ch,16,4,crc);w(ch,20,4,b.length);w(ch,24,4,b.length);w(ch,28,2,n.length);w(ch,42,4,offset);ch.set(n,46);central.push(ch);clen+=ch.length;offset+=h.length+b.length;}let end=make(22);w(end,0,4,0x06054b50);w(end,8,2,central.length);w(end,10,2,central.length);w(end,12,4,clen);w(end,16,4,offset);let out=make(offset+clen+22),p=0;for(let b of [...chunks,...central,end]){out.set(b,p);p+=b.length;}return out;}
-const api={VERSION,DECLARATION,standardTrack,geometry,crossing,simulate,validate,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
+const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,geometry,crossing,simulate,validate,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
 })(globalThis);
