@@ -13,8 +13,8 @@ function checked(session,timeline){
  return {start,rows,end:start+rows.at(-1).t,seconds:rows.at(-1).t,distance:rows.at(-1).distance_m};
 }
 function crc(bytes){let c=0;for(let b of bytes){c^=b;for(let i=0;i<8;i++)c=(c&1)?(c>>>1)^0xa001:c>>>1;}return c;}
-function fit(session,timeline){
- const s=checked(session,timeline),data=[],defs=new Map(),sizes={0:1,2:1,132:2,134:4,140:4},U=134,H=132,B=2,E=0;
+function encodeFit(session,timeline,positions=null){
+ const s=checked(session,timeline),data=[],defs=new Map(),sizes={0:1,2:1,132:2,133:4,134:4,140:4},U=134,H=132,B=2,E=0;
  const f=(n,t,size=sizes[t])=>[n,t,size],put=(a,v,n)=>{for(let i=0;i<n;i++)a.push((v>>>(8*i))&255);};
  function define(l,g,fs){defs.set(l,fs);data.push(64|l,0,0);put(data,g,2);data.push(fs.length);for(const[n,t,size]of fs)data.push(n,size,t);}
  function msg(l,vs){data.push(l);defs.get(l).forEach(([n,t,size],i)=>{const v=vs[i];if(t===7){for(let j=0;j<size;j++)data.push(j<Math.min(v.length,size-1)?v.charCodeAt(j):0);}else put(data,v,size);});}
@@ -22,8 +22,9 @@ function fit(session,timeline){
  const active=s.rows.slice(1),avg=k=>active.reduce((a,r)=>a+r[k],0)/active.length,max=k=>active.reduce((a,r)=>Math.max(a,r[k]),0),hr=Math.round(avg('hr_bpm')),cad=Math.round(avg('cadence_spm')/2),cycles=Math.round(active.reduce((a,r,i)=>a+r.cadence_spm*(r.t-s.rows[i].t)/120,0));
  define(0,0,[f(0,E),f(1,H),f(2,H),f(3,140),f(4,U),f(8,7,32)]);msg(0,[4,255,0,session.seed||1,t0,LABEL]);
  define(1,21,[f(253,U),f(0,E),f(1,E)]);msg(1,[t0,0,0]);
- define(2,20,[f(253,U),f(5,U),f(6,H),f(3,B),f(4,B)]);
- for(const r of s.rows)msg(2,[t0+r.t,Math.round(r.distance_m*100),Math.round(r.speed_mps*1000),Math.round(r.hr_bpm),Math.round(r.cadence_spm/2)]);
+ const semicircle=n=>Math.round(n*2147483648/180);
+ define(2,20,[f(253,U),f(5,U),f(6,H),f(3,B),f(4,B),...(positions?[f(0,133),f(1,133)]:[])]);
+ for(const [i,r] of s.rows.entries())msg(2,[t0+r.t,Math.round(r.distance_m*100),Math.round(r.speed_mps*1000),Math.round(r.hr_bpm),Math.round(r.cadence_spm/2),...(positions?positions[i].map(semicircle):[])]);
  msg(1,[t1,0,4]);
  const common=[elapsed,elapsed,dist,cycles,speed,Math.round(max('speed_mps')*1000),hr,Math.round(max('hr_bpm')),cad,Math.round(max('cadence_spm')/2)];
  define(3,19,[f(254,H),f(253,U),f(0,E),f(1,E),f(2,U),f(7,U),f(8,U),f(9,U),f(10,U),f(13,H),f(14,H),f(15,B),f(16,B),f(17,B),f(18,B),f(25,E)]);msg(3,[0,t1,9,1,t0,...common,1]);
@@ -32,10 +33,24 @@ function fit(session,timeline){
  const head=[14,32];put(head,2100,2);put(head,data.length,4);head.push(46,70,73,84);put(head,crc(head),2);
  const out=new Uint8Array(head.length+data.length+2);out.set(head);out.set(data,head.length);new DataView(out.buffer).setUint16(out.length-2,crc(out.subarray(0,-2)),true);return out;
 }
-function tcx(session,timeline){
+function encodeTcx(session,timeline,positions=null){
  const s=checked(session,timeline),stamp=t=>new Date((s.start+t)*1000).toISOString(),num=n=>String(Math.round(n*1e6)/1e6);
- const track=s.rows.map(r=>'<Trackpoint><Time>'+stamp(r.t)+'</Time><DistanceMeters>'+num(r.distance_m)+'</DistanceMeters><HeartRateBpm><Value>'+Math.round(r.hr_bpm)+'</Value></HeartRateBpm><Cadence>'+Math.round(r.cadence_spm/2)+'</Cadence><Extensions><ns3:TPX><ns3:Speed>'+num(r.speed_mps)+'</ns3:Speed><ns3:RunCadence>'+Math.round(r.cadence_spm/2)+'</ns3:RunCadence></ns3:TPX></Extensions></Trackpoint>').join('');
- return '<?xml version="1.0" encoding="UTF-8"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"><Activities><Activity Sport="Running"><Id>'+stamp(0)+'</Id><Lap StartTime="'+stamp(0)+'"><TotalTimeSeconds>'+s.seconds+'</TotalTimeSeconds><DistanceMeters>'+num(s.distance)+'</DistanceMeters><Calories>0</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>'+track+'</Track><Notes>'+LABEL+' - simulated, not measured; cadence is cycles/minute; calories unavailable</Notes></Lap><Notes>'+LABEL+' - model distance, no GPS position; not measured activity</Notes></Activity></Activities></TrainingCenterDatabase>';
+ const track=s.rows.map((r,i)=>'<Trackpoint><Time>'+stamp(r.t)+'</Time>'+(positions?'<Position><LatitudeDegrees>'+num(positions[i][0])+'</LatitudeDegrees><LongitudeDegrees>'+num(positions[i][1])+'</LongitudeDegrees></Position>':'')+'<DistanceMeters>'+num(r.distance_m)+'</DistanceMeters><HeartRateBpm><Value>'+Math.round(r.hr_bpm)+'</Value></HeartRateBpm><Cadence>'+Math.round(r.cadence_spm/2)+'</Cadence><Extensions><ns3:TPX><ns3:Speed>'+num(r.speed_mps)+'</ns3:Speed><ns3:RunCadence>'+Math.round(r.cadence_spm/2)+'</ns3:RunCadence></ns3:TPX></Extensions></Trackpoint>').join('');
+ return '<?xml version="1.0" encoding="UTF-8"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"><Activities><Activity Sport="Running"><Id>'+stamp(0)+'</Id><Lap StartTime="'+stamp(0)+'"><TotalTimeSeconds>'+s.seconds+'</TotalTimeSeconds><DistanceMeters>'+num(s.distance)+'</DistanceMeters><Calories>0</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>'+track+'</Track><Notes>'+LABEL+' - simulated, not measured; cadence is cycles/minute; calories unavailable</Notes></Lap><Notes>'+LABEL+(positions?' - fixed ocean coordinate parser fixture, not measured activity':' - model distance, no GPS position; not measured activity')+'</Notes></Activity></Activities></TrainingCenterDatabase>';
 }
-const api={fit,tcx,checked};if(typeof module!=='undefined')module.exports=api;else root.StrideFormats=api;
+// This fixed, non-user-configurable coordinate fixture is separate from all
+// sessions and reference maps. The points lie in the open Pacific.
+function gpsFixture(){
+ const positions=[[0,-140],[0,-139.9999],[0.0001,-139.9999],[0.0001,-140]];
+ const step=6371008.8*Math.PI/180*.0001;
+ const rows=positions.map((p,i)=>({t:i*10,distance_m:i*step,speed_mps:i?step/10:0,hr_bpm:0,cadence_spm:0,synthetic:true}));
+ const session={id:'FIXTURE',seed:1,rows,summary:{synthetic:true,model_distance_m:rows.at(-1).distance_m,seconds:30}};
+ const timeline={sample_id:'FIXTURE',synthetic:true,scenario_start:'2030-01-01T00:00:00Z',scenario_end:'2030-01-01T00:00:30Z'};
+ return {session,timeline,positions};
+}
+function fit(session,timeline){return encodeFit(session,timeline);}
+function tcx(session,timeline){return encodeTcx(session,timeline);}
+function gpsFixtureFit(){const g=gpsFixture();return encodeFit(g.session,g.timeline,g.positions);}
+function gpsFixtureTcx(){const g=gpsFixture();return encodeTcx(g.session,g.timeline,g.positions);}
+const api={fit,tcx,checked,gpsFixtureFit,gpsFixtureTcx};if(typeof module!=='undefined')module.exports=api;else root.StrideFormats=api;
 })(globalThis);
