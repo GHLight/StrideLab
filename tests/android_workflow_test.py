@@ -91,4 +91,27 @@ for v in b:
     for _ in range(8):c=(c>>1)^0xa001 if c&1 else c>>1
 assert c==0,'Saved FIT CRC mismatch'
 capture('android-export-complete')
+# TCX is XML internally, but the actual saved filename must have the TCX extension.
+click('文件')
+click('导出所选 TCX',scroll=True)
+capture('android-tcx-save-dialog')
+root=tree();labels=[n.get('text','') for n in root.iter('node')]
+assert any('SIM-1_SYNTHETIC' in t for t in labels),labels
+saved=False
+for n in root.iter('node'):
+    if n.get('text','').upper()=='SAVE' or n.get('text')=='保存' or n.get('content-desc','').lower()=='save':
+        xy=center(n)
+        if xy and n.get('enabled')=='true':adb('shell','input','tap',str(xy[0]),str(xy[1]));saved=True;break
+assert saved,'System TCX save control not found'
+time.sleep(2)
+paths=adb('shell','find','/sdcard/Download','-name','SIM-1_SYNTHETIC.tcx').strip().splitlines()
+assert paths,'Saved TCX missing or wrong extension'
+adb('pull',paths[0],str(OUT/'android-selected.tcx'))
+xml=ET.parse(OUT/'android-selected.tcx').getroot()
+ns={'t':'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2'}
+assert xml.tag=='{'+ns['t']+'}TrainingCenterDatabase'
+assert len(xml.findall('.//t:Trackpoint',ns))>1
+assert 'SYNTHETIC_RESEARCH' in ''.join(xml.itertext())
+capture('android-tcx-export-complete')
+print('PASS: Android TCX actual filename, XML parsing and synthetic provenance')
 print('PASS: installed APK generation, process restart result recovery, selected FIT Android system save and file CRC')
