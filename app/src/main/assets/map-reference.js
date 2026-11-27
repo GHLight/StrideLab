@@ -12,15 +12,15 @@
   controls.innerHTML='<div class="toolbar" style="flex-wrap:nowrap"><input id="mapSearch" type="search" placeholder="搜索学校、道路或地名" aria-label="搜索地名" style="min-width:0;flex:1"><button id="mapSearchGo">搜索</button></div><div id="mapSearchResults" hidden></div>';
   $('mapPanel').prepend(controls);
   const providers={
-    street:{name:'街道地图',url:(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/'+z+'/'+y+'/'+x,credit:'Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, GIS User Community'},
+    street:{name:'街道地图',url:(z,x,y)=>'https://tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png',credit:'© OpenStreetMap contributors'},
     satellite:{name:'卫星影像',url:(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/'+z+'/'+y+'/'+x,credit:'Source: Esri, Vantor, Earthstar Geographics, GIS User Community'},
-    osm:{name:'OpenStreetMap',url:(z,x,y)=>'https://tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png',credit:'© OpenStreetMap contributors'}
+
   };
-  let provider='street';try{const saved=localStorage.getItem('stridelab.reference.provider');if(providers[saved])provider=saved;}catch(e){}
-  const layer=document.createElement('label');layer.className='field';layer.innerHTML='<span>底图</span><select id="mapProvider"><option value="street">街道地图</option><option value="satellite">卫星影像</option><option value="osm">OpenStreetMap</option></select>';controls.append(layer);
+  let provider='street';try{let saved=localStorage.getItem('stridelab.reference.provider');if(saved==='osm')saved='street';if(providers[saved])provider=saved;}catch(e){}
+  const layer=document.createElement('label');layer.className='field';layer.innerHTML='<span>底图</span><select id="mapProvider"><option value="street">街道地图</option><option value="satellite">卫星影像</option></select>';controls.append(layer);
   const attribution=map.querySelector('.attribution');attribution.style.maxWidth='calc(100% - 12px)';attribution.style.fontSize='9px';
   const credits=document.createElement('details');credits.className='hint';credits.innerHTML='<summary>底图来源与说明</summary><p id="mapCredits"></p><p>联网请求会向所选地图服务发送当前视野瓦片请求；未上传模拟记录。影像拍摄日期、地名和精度取决于服务商，卫星底图不保证包含地名。</p>';controls.append(credits);
-  function showProvider(){const p=providers[provider];$('mapProvider').value=provider;$('mapCredits').textContent=p.credit;attribution.textContent=provider==='osm'?'© OpenStreetMap contributors':'Esri · '+(provider==='satellite'?'Vantor · Earthstar Geographics':'HERE · Garmin · © OSM')+' · 完整来源见底图说明';}
+  function showProvider(){const p=providers[provider];$('mapProvider').value=provider;$('mapCredits').textContent=p.credit;attribution.textContent=provider==='street'?'© OpenStreetMap contributors':'Esri · '+(provider==='satellite'?'Vantor · Earthstar Geographics':'HERE · Garmin · © OSM')+' · 完整来源见底图说明';}
   showProvider();$('mapProvider').onchange=()=>{provider=$('mapProvider').value;try{localStorage.setItem('stridelab.reference.provider',provider);}catch(e){}tiles.replaceChildren();showProvider();draw();};
 
   const HUD=document.createElement('div');HUD.style.cssText='position:absolute;top:8px;left:8px;background:#fafaf6ed;border:1px solid #dce2da;border-radius:8px;padding:4px 7px;font-size:11px;pointer-events:none;z-index:2';map.append(HUD);

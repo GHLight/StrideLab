@@ -35,4 +35,5 @@ if grep -q 'Process: lab.stridelab,' test-evidence/android-logcat.txt; then
   echo "Application crash reported in logcat" >&2
   exit 1
 fi
+python3 tests/android_workflow_test.py
 echo "PASS: installed APK, launch, live process and visible route UI on emulator"
