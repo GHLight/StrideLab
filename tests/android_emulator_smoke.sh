@@ -19,16 +19,21 @@ adb shell am start -W -n "$package/.MainActivity" | tee test-evidence/launch.txt
 grep -q 'Status: ok' test-evidence/launch.txt
 ready=0
 for attempt in $(seq 1 15); do
-  if adb shell pidof "$package" >/dev/null && adb shell uiautomator dump /sdcard/stridelab-ui.xml >/dev/null 2>&1; then
-    adb pull /sdcard/stridelab-ui.xml test-evidence/android-ui.xml >/dev/null 2>&1
+  rm -f test-evidence/android-ui.xml
+  adb shell rm -f /sdcard/stridelab-ui.xml || true
+  if adb shell pidof "$package" >/dev/null && adb shell uiautomator dump /sdcard/stridelab-ui.xml >> test-evidence/ui-dump-attempts.txt 2>&1 && adb pull /sdcard/stridelab-ui.xml test-evidence/android-ui.xml >> test-evidence/ui-dump-attempts.txt 2>&1; then
     if grep -q 'StrideLab' test-evidence/android-ui.xml && grep -Eq '场地编辑|路线|地图参考编辑' test-evidence/android-ui.xml; then
       ready=1
       break
     fi
   fi
+  echo "UI not ready on attempt $attempt" | tee -a test-evidence/ui-dump-attempts.txt
   sleep 2
 done
-test "$ready" = 1
+if [ "$ready" != 1 ]; then
+  echo "Application UI did not become ready; see UI dump attempts and screenshot" >&2
+  exit 1
+fi
 adb shell pidof "$package" >/dev/null
 adb logcat -d -v threadtime > test-evidence/android-logcat.txt
 if grep -q 'Process: lab.stridelab,' test-evidence/android-logcat.txt; then
