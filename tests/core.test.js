@@ -61,3 +61,8 @@ assert.equal(C.describe([1,2,3,null,NaN]).mean,2);
 assert.ok(Math.abs(C.describe([1,2,3]).p95-2.9)<1e-9);
 assert.equal(C.describe([]).mean,null);
 console.log('PASS: research statistics, quantiles, missing observations and zero-noise error distribution');
+
+for(let i=0;i<sweep.count;i++)assert.equal(C.simulateResearch({...sweep,durationMode:'duration'},p,true,i).summary.seconds,720);
+assert.throws(()=>C.validate({...sweep,durationMode:'duration',distanceSpreadM:2000}));
+assert.throws(()=>C.validate({...sweep,durationMode:'duration',pace:3}));
+console.log('PASS: fixed-duration local experiments and pace bounds');
