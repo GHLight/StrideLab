@@ -63,6 +63,16 @@ try:
         expect(page.locator("#count")).to_have_value("3")
         expect(page.locator("#fixedStart")).to_have_value("30")
         assert not page.locator("#randomStart").is_checked()
+        page.locator('nav [data-go="analysis"]').click()
+        expect(page.locator("#results")).to_be_visible()
+        expect(page.locator("#summaryBody tr")).to_have_count(3)
+        page.locator('nav [data-go="files"]').click()
+        page.click("#download")
+        restored = page.evaluate("window.__exports[0]")
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(exports[0]["data"]))) as original_zip, zipfile.ZipFile(io.BytesIO(base64.b64decode(restored["data"]))) as restored_zip:
+            assert sorted(original_zip.namelist()) == sorted(restored_zip.namelist())
+            for name in original_zip.namelist():
+                assert original_zip.read(name) == restored_zip.read(name), name
         assert not errors, errors
         browser.close()
 finally:
