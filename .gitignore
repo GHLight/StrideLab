@@ -1,0 +1,18 @@
+# Android and Gradle
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+*.jks
+*.keystore
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+# Local output and credentials
+.env
+.env.*
+!.env.example
+generated/
+format_fixture/
