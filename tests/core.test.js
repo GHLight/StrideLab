@@ -14,3 +14,24 @@ const normalized=C.simulate({...c,noise:0},shaped.points,true,0);
 assert.ok(Math.abs(normalized.summary.route_length_m-400)<1e-8);
 assert.ok(Math.abs(normalized.summary.model_distance_m-2000)<1e-6);
 console.log('PASS: reference-shape normalization, closed local stadium, invalid marks and local simulation integration');
+
+const irregular=[[0,0],[80,0],[90,30],[30,50],[-10,25]];
+for(const closed of [true,false])for(const mode of ['linear','smooth'])for(const count of [5,30,120]){
+ const r=C.interpolateLocalRoute(irregular,closed,count,mode,.7);
+ assert.equal(r.points.length,count);
+ assert.equal(r.closed,closed);
+ assert.ok(irregular.every(p=>r.points.some(q=>p[0]===q[0]&&p[1]===q[1])));
+ assert.equal(C.crossing(r.points,closed),0);
+ if(mode==='linear')assert.ok(Math.abs(r.length_m-C.geometry(irregular,closed).len)<1e-8);
+}
+assert.throws(()=>C.interpolateLocalRoute(irregular,true,4));
+assert.throws(()=>C.interpolateLocalRoute(irregular,true,121));
+assert.throws(()=>C.interpolateLocalRoute([[0,0],[0,0],[5,5]],true,30));
+const ref=C.referenceLocalRoute(marks,true,60,'linear',0);
+assert.equal(ref.points.length,60);
+assert.ok(ref.length_m>310&&ref.length_m<312);
+assert.ok(!('lat' in ref)&&!('lon' in ref));
+const research=C.simulate({...c,noise:0},ref.points,true,0);
+assert.ok(Math.abs(research.summary.route_length_m-ref.length_m)<1e-8);
+assert.equal(research.rows.length,721);
+console.log('PASS: ordered local interpolation, vertex preservation, adjustable point count, actual local scale and simulation integration');
