@@ -73,6 +73,24 @@ try:
             assert sorted(original_zip.namelist()) == sorted(restored_zip.namelist())
             for name in original_zip.namelist():
                 assert original_zip.read(name) == restored_zip.read(name), name
+        # FIT and TCX are standalone fixed synthetic fixtures, not exports of the current experiment.
+        page.click("#exportFitFixture")
+        page.click("#exportTcxFixture")
+        fixtures = page.evaluate("window.__exports.slice(-2)")
+        assert fixtures[0]["name"] == "SYNTHETIC_FORMAT_FIXTURE.fit"
+        assert fixtures[1]["name"] == "SYNTHETIC_FORMAT_FIXTURE.tcx"
+        import sys
+        import xml.etree.ElementTree as ET
+        sys.path.insert(0, str(ROOT / "skills/synthetic-running-data/scripts"))
+        from format_fixture import validate_fit
+        validate_fit(base64.b64decode(fixtures[0]["data"]), 31)
+        xml = ET.fromstring(base64.b64decode(fixtures[1]["data"]))
+        ns = {"t": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+        assert len(xml.findall(".//t:Trackpoint", ns)) == 31
+        assert xml.find(".//t:TotalTimeSeconds", ns).text == "30"
+        assert xml.find(".//t:DistanceMeters", ns).text == "50"
+        assert not xml.findall(".//t:Position", ns)
+        assert "SYNTHETIC_RESEARCH" in "".join(xml.itertext())
         assert not errors, errors
         browser.close()
 finally:
