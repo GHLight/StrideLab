@@ -34,6 +34,10 @@ try:
         expect(page.locator("#npts")).to_have_text("26")
         page.locator('nav [data-go="sim"]').click()
         page.fill("#count","3")
+        page.fill("#scenarioDate","2030-12-31")
+        page.fill("#scenarioTime","23:55")
+        page.select_option("#scenarioZone","+08:00")
+        page.fill("#scenarioDayGap","2")
         page.uncheck("#randomStart")
         page.fill("#fixedStart","30")
         page.fill("#noise","0")
@@ -52,6 +56,12 @@ try:
             manifest = json.loads(z.read("manifest.json"))
             assert manifest["synthetic"] is True and len(manifest["summary"]) == 3
             assert manifest["config"]["fixedStart"] == 30
+            timeline = manifest["scenario_timeline"]
+            assert timeline[0]["scenario_start"] == "2030-12-31T23:55:00+08:00"
+            assert timeline[0]["scenario_end"] == "2031-01-01T00:07:00+08:00"
+            assert timeline[2]["scenario_start"] == "2031-01-04T23:55:00+08:00"
+            assert all(r["synthetic"] is True for r in timeline)
+            assert "scenario_timeline.csv" in z.namelist()
             sample_names = [n for n in z.namelist() if n.startswith("samples/")]
             assert len(sample_names) == 3
             for n in sample_names:
@@ -61,6 +71,10 @@ try:
         page.reload()
         page.locator('nav [data-go="sim"]').click()
         expect(page.locator("#count")).to_have_value("3")
+        expect(page.locator("#scenarioDate")).to_have_value("2030-12-31")
+        expect(page.locator("#scenarioTime")).to_have_value("23:55")
+        expect(page.locator("#scenarioZone")).to_have_value("+08:00")
+        expect(page.locator("#scenarioDayGap")).to_have_value("2")
         expect(page.locator("#fixedStart")).to_have_value("30")
         assert not page.locator("#randomStart").is_checked()
         page.locator('nav [data-go="analysis"]').click()
