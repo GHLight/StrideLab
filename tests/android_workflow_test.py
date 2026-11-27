@@ -32,6 +32,23 @@ def assert_analysis():
     assert not any('还没有模拟结果' in t for t in labels)
 # Use a fixed viewport, so scrolling avoids the bottom navigation on all runner AVDs.
 adb('shell','wm','size','320x640');adb('shell','wm','density','160');time.sleep(1)
+# Reproduce the reported first-run location denial on the actual Android WebView.
+# This is an isolated CI emulator; no user installation is cleared.
+adb('shell','pm','clear','lab.stridelab')
+for permission in ['android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION']:
+    adb('shell','pm','revoke','lab.stridelab',permission)
+    adb('shell','pm','set-permission-flags','lab.stridelab',permission,'user-set','user-fixed')
+adb('shell','am','force-stop','lab.stridelab');adb('shell','am','start','-W','-n','lab.stridelab/.MainActivity');time.sleep(2)
+root=tree()
+assert any(n.get('text')=='地图参考选点' or n.get('content-desc')=='地图参考选点' for n in root.iter('node')),'Map region disappeared after location denial'
+assert any('尚未确定地图位置' in n.get('text','') for n in root.iter('node')),'Location recovery prompt missing'
+web=next(n for n in root.iter('node') if n.get('class')=='android.webkit.WebView')
+assert int(re.findall(r'\d+',web.get('bounds'))[1])>=20,'WebView overlaps status bar'
+capture('android-map-location-denied')
+for permission in ['android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION']:
+    adb('shell','pm','clear-permission-flags','lab.stridelab',permission,'user-set','user-fixed')
+    adb('shell','pm','grant','lab.stridelab',permission)
+adb('shell','am','force-stop','lab.stridelab');adb('shell','am','start','-W','-n','lab.stridelab/.MainActivity');time.sleep(2)
 click('模拟');click('生成研究样本',scroll=True);time.sleep(2)
 click('分析');assert_analysis();capture('android-generated-analysis')
 adb('shell','am','force-stop','lab.stridelab');adb('shell','am','start','-W','-n','lab.stridelab/.MainActivity');time.sleep(2)
