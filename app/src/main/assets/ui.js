@@ -173,7 +173,8 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
  const importField=document.createElement('label');importField.className='field';importField.innerHTML='<span>从本机选择研究备份（浏览器支持时）</span><input id="projectImportFile" type="file" accept=".json,application/json">';
  $('projectImportText').before(importField);
  $('projectImportFile').onchange=async()=>{const f=$('projectImportFile').files?.[0];if(!f)return;try{if(f.size>1000000)throw Error('备份超过1 MB');$('projectImportText').value=await f.text();$('projectMessage').textContent='已读取备份，请点击验证并导入。';}catch(e){$('projectMessage').textContent='读取失败：'+e.message;}finally{$('projectImportFile').value='';}};
- if(window.StrideAndroid)importField.hidden=true;
+ if(window.StrideAndroid&&typeof StrideAndroid.openBackup==='function'){importField.hidden=true;const open=document.createElement('button');open.id='projectImportNative';open.className='wide';open.textContent='选择 JSON 备份文件';importField.after(open);open.onclick=()=>{open.disabled=true;StrideAndroid.openBackup();};window.StrideBackupResult=(json,message)=>{open.disabled=false;if(typeof json==='string')$('projectImportText').value=json;$('projectMessage').textContent=message;};}
+ else if(window.StrideAndroid)importField.hidden=true;
  const fileOverview=$('fileStatus').closest('.card'),source=document.createElement('p');source.className='notice';source.textContent='当前研究样本为局部合成数据，不包含地理 GPS。独立 GPS 格式夹具位于高级工具。';fileOverview.append(source);
  check();diagnostics();
 })();
