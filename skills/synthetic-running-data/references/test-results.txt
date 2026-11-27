@@ -1,0 +1,17 @@
+test_batch_and_rerun (__main__.TestSkill.test_batch_and_rerun) ... ok
+test_crossing_and_unknown_crs (__main__.TestSkill.test_crossing_and_unknown_crs) ... ok
+test_default (__main__.TestSkill.test_default) ... ok
+test_duration (__main__.TestSkill.test_duration) ... ok
+test_fixed_start_reverse (__main__.TestSkill.test_fixed_start_reverse) ... ok
+test_fixture (__main__.TestSkill.test_fixture) ... ok
+test_multinode (__main__.TestSkill.test_multinode) ... ok
+test_noise_independence (__main__.TestSkill.test_noise_independence) ... ok
+test_open (__main__.TestSkill.test_open) ... ok
+test_optional_metrics (__main__.TestSkill.test_optional_metrics) ... ok
+test_reference_separated (__main__.TestSkill.test_reference_separated) ... ok
+test_zero_noise_and_seed (__main__.TestSkill.test_zero_noise_and_seed) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.141s
+
+OK

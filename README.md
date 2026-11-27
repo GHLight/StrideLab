@@ -2,8 +2,6 @@
 
 当前工程归档：Android V0.1 + synthetic-running-data Skill V2.0。
 
-**上传状态：当前仅提交项目说明及基础配置，完整源码和设计资源尚待上传。**
-
 ## 项目入口
 - `skills/synthetic-running-data/`：当前独立 Skill，优先使用；见其中 SKILL.md 和 README.md。
 - `app/`：现有 Android WebView 工程（未完成 APK 编译）。
