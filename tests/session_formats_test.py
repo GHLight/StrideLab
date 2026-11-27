@@ -112,3 +112,23 @@ for encoded in [*(c['fit'] for c in cases),g['fit'],g['ordinary'],gps['fit']]:
     assert raw[0]==14 and raw[1]==0x10 and raw[8:12]==b'.FIT'
     assert int.from_bytes(raw[4:8],'little')==len(raw)-16
 print('PASS: FIT 1.0 headers for selected, geographic and no-GPS exports')
+
+# Full running-dynamics and lap fields, with values calculated from source data.
+raw=base64.b64decode(g['fit'])
+assert int.from_bytes(raw[2:4],'little')==2184
+with fitdecode.FitReader(io.BytesIO(raw),check_crc=fitdecode.CrcCheck.RAISE) as reader:
+    ms=[m for m in reader if isinstance(m,fitdecode.FitDataMessage)]
+records=[m for m in ms if m.name=='record']
+laps=[m for m in ms if m.name=='lap']
+session=next(m for m in ms if m.name=='session')
+assert len(laps)>1 and session.get_value('num_laps')==len(laps)
+assert abs(sum(l.get_value('total_distance') for l in laps)-session.get_value('total_distance'))<0.00001
+assert sum(l.get_value('total_timer_time') for l in laps)==session.get_value('total_timer_time')
+for m,r in zip(records[1:],g['session']['rows'][1:]):
+    assert abs(m.get_value('vertical_oscillation')-r['vertical_oscillation_mm'])<=0.050001
+    assert abs(m.get_value('stance_time')-r['ground_contact_ms'])<=0.050001
+    assert abs(m.get_value('stance_time_percent')-r['ground_contact_ms']*r['cadence_spm']/600)<=0.005001
+    assert abs(m.get_value('step_length')-r['step_length_m']*1000)<=0.050001
+assert session.get_value('sport_profile_name')=='SYNTHETIC_RESEARCH'
+assert all(l.get_value('avg_stance_time')>0 for l in laps)
+print('PASS: standard running-dynamics fields, lap totals and synthetic source labels')
