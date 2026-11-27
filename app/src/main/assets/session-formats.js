@@ -30,7 +30,8 @@ function encodeFit(session,timeline,positions=null){
  define(3,19,[f(254,H),f(253,U),f(0,E),f(1,E),f(2,U),f(7,U),f(8,U),f(9,U),f(10,U),f(13,H),f(14,H),f(15,B),f(16,B),f(17,B),f(18,B),f(25,E)]);msg(3,[0,t1,9,1,t0,...common,1]);
  define(4,18,[f(254,H),f(253,U),f(0,E),f(1,E),f(2,U),f(5,E),f(6,E),f(7,U),f(8,U),f(9,U),f(10,U),f(14,H),f(15,H),f(16,B),f(17,B),f(18,B),f(19,B),f(25,H),f(26,H),f(110,7,32)]);msg(4,[0,t1,8,1,t0,1,0,...common,0,1,LABEL]);
  define(5,34,[f(253,U),f(0,U),f(1,H),f(2,E),f(3,E),f(4,E)]);msg(5,[t1,elapsed,1,0,26,1]);
- const head=[14,32];put(head,2100,2);put(head,data.length,4);head.push(46,70,73,84);put(head,crc(head),2);
+ // All definitions in this encoder use FIT 1.x base fields; no developer fields.
+ const head=[14,16];put(head,2100,2);put(head,data.length,4);head.push(46,70,73,84);put(head,crc(head),2);
  const out=new Uint8Array(head.length+data.length+2);out.set(head);out.set(data,head.length);new DataView(out.buffer).setUint16(out.length-2,crc(out.subarray(0,-2)),true);return out;
 }
 function encodeTcx(session,timeline,positions=null){
