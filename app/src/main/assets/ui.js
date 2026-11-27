@@ -92,6 +92,10 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
  const card=document.createElement('div');card.className='card';card.innerHTML='<h3>FIT / TCX 格式测试</h3><p class="hint">固定 50 米、30 秒的非地理合成测试夹具，与当前实验无关。仅用于授权格式测试。</p><div class="toolbar"><button id="exportFitFixture">固定测试 FIT</button><button id="exportTcxFixture">固定测试 TCX</button></div><p class="hint">无需生成实验或解压。未通过第三方软件兼容性验收。</p>';$('files').querySelector('.card').after(card);
  $('exportFitFixture').onclick=()=>deliver('SYNTHETIC_FORMAT_FIXTURE.fit',fit(),'application/vnd.ant.fit');
  $('exportTcxFixture').onclick=()=>deliver('SYNTHETIC_FORMAT_FIXTURE.tcx',tcx(),'application/vnd.garmin.tcx+xml');
+ const gpsCard=document.createElement('div');gpsCard.className='card';gpsCard.innerHTML='<h3>GPS 坐标格式测试</h3><p class="hint">固定四点、太平洋海域的独立合成坐标夹具，仅用于解析和轨迹绘制测试；不使用当前实验或用户地图位置，不是实际运动记录。</p><div class="toolbar"><button id="exportGpsFixtureFit">GPS 测试 FIT</button><button id="exportGpsFixtureTcx">GPS 测试 TCX</button></div>';
+ card.after(gpsCard);
+ $('exportGpsFixtureFit').onclick=()=>deliver('SYNTHETIC_GPS_FIXTURE.fit',StrideFormats.gpsFixtureFit(),'application/vnd.ant.fit');
+ $('exportGpsFixtureTcx').onclick=()=>deliver('SYNTHETIC_GPS_FIXTURE.tcx',StrideFormats.gpsFixtureTcx(),'application/vnd.garmin.tcx+xml');
 })();
 
 // Export the selected saved experiment, independent of current form edits.
