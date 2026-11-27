@@ -6,7 +6,7 @@ const scenarioInfo=document.createElement('p');scenarioInfo.className='hint';$('
 function scenarioTimeline(c){
   const date=c.scenarioDate,time=c.scenarioTime,zone=c.scenarioZone,gap=c.scenarioDayGap;
   if(date===undefined&&time===undefined&&zone===undefined&&gap===undefined)return null;
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||date<'1900-01-01'||date>'2099-12-31'||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time)||!/^[-+]\\d{2}:[0-5]\\d$/.test(zone)||!Number.isInteger(gap)||gap<0||gap>365)throw Error('请填写有效的示例日期、时间、时区和日期间隔');
+  if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||date<'1900-01-01'||date>'2099-12-31'||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(time)||!/^[-+][0-9]{2}:[0-5][0-9]$/.test(zone)||!Number.isInteger(gap)||gap<0||gap>365)throw Error('请填写有效的示例日期、时间、时区和日期间隔');
   const mins=(zone[0]==='-'?-1:1)*(Number(zone.slice(1,3))*60+Number(zone.slice(4,6)));
   if(mins< -720||mins>840||mins%15!==0)throw Error('UTC偏移无效');
   const base=Date.parse(date+'T'+time+':00Z'),duration=Math.round(c.distance*c.pace*60);
