@@ -42,4 +42,24 @@ for c in cases:
         assert abs(float(t.find('t:DistanceMeters',ns).text)-r['distance_m'])<.000001
         assert abs(float(t.find('t:Extensions/a:TPX/a:Speed',ns).text)-r['speed_mps'])<.000001
     assert 'SYNTHETIC_RESEARCH' in ''.join(xml.itertext())
+# Separate fixed coordinate fixture. Do not conflate local sessions with GPS.
+gps=json.loads(subprocess.check_output(['node','-e',"""const F=require('./app/src/main/assets/session-formats.js');console.log(JSON.stringify({fit:Buffer.from(F.gpsFixtureFit()).toString('base64'),tcx:F.gpsFixtureTcx()}));"""],cwd=ROOT))
+with fitdecode.FitReader(io.BytesIO(base64.b64decode(gps['fit'])),check_crc=fitdecode.CrcCheck.RAISE) as reader:
+    frames=[m for m in reader if isinstance(m,fitdecode.FitDataMessage)]
+records=[m for m in frames if m.name=='record']
+positions=[(0,-140),(0,-139.9999),(.0001,-139.9999),(.0001,-140)]
+assert len(records)==len(positions)
+for m,(lat,lon) in zip(records,positions):
+    assert abs(m.get_value('position_lat')*180/2**31-lat)<1e-7
+    assert abs(m.get_value('position_long')*180/2**31-lon)<1e-7
+assert next(m for m in frames if m.name=='session').get_value('sport_profile_name')=='SYNTHETIC_RESEARCH'
+xml=etree.fromstring(gps['tcx'].encode())
+if schema:schema.assertValid(xml)
+track=xml.findall('.//t:Trackpoint/t:Position',ns)
+assert len(track)==4
+for node,(lat,lon) in zip(track,positions):
+    assert float(node.find('t:LatitudeDegrees',ns).text)==lat
+    assert float(node.find('t:LongitudeDegrees',ns).text)==lon
+assert 'fixed ocean coordinate parser fixture' in ''.join(xml.itertext())
+print('PASS: fixed GPS fixture FIT coordinate decoding and matching TCX positions')
 print('PASS: selected session FIT independent CRC/decode, UTC offsets, cadence units, row/summary consistency, invalid inputs, TCX XML'+(' and official XSD' if schema else '; XSD not requested'))
