@@ -277,6 +277,52 @@ try:
         expect(page.locator("#npts")).to_have_text("26")
         page.click("#redo")
         expect(page.locator("#npts")).to_have_text("80")
+        # Map-derived route: the actual exported archive contains geographic FIT records
+        # and retains the explicitly synthetic label. The mode can still be switched off.
+        expect(page.locator("#mapFittedOverlay")).to_have_count(1)
+        page.click("#mapUseShape")
+        expect(page.locator("#positionMode")).to_have_value("geo")
+        page.fill("#count","2")
+        page.fill("#distance","2")
+        page.fill("#scenarioDate","2030-01-01")
+        page.fill("#scenarioTime","00:00")
+        page.fill("#noise","0")
+        page.click("#generate")
+        expect(page.locator("#summaryBody tr")).to_have_count(2)
+        page.locator('nav [data-go="files"]').click()
+        page.click("#downloadFitBatch")
+        geo_batch=page.evaluate("window.__exports.at(-1)")
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(geo_batch["data"]))) as z:
+            assert z.testzip() is None
+            manifest=json.loads(z.read("manifest.json"))
+            assert manifest["contains_gps"] is True and manifest["count"]==2 and manifest["synthetic"] is True
+            for entry in manifest["files"]:
+                assert entry["position_source"]=="synthetic_map_reference"
+                with fitdecode.FitReader(io.BytesIO(z.read(entry["name"])),check_crc=fitdecode.CrcCheck.RAISE) as reader:
+                    ms=[m for m in reader if isinstance(m,fitdecode.FitDataMessage)]
+                assert next(m for m in ms if m.name=="session").get_value("sport_profile_name")=="SYNTHETIC_RESEARCH"
+                records=[m for m in ms if m.name=="record"]
+                assert len(records)==721
+                for record in records:
+                    assert 29.99999 <= record.get_value("position_lat")*180/2**31 <= 30.00021
+                    assert 119.99999 <= record.get_value("position_long")*180/2**31 <= 120.00021
+        page.reload()
+        page.locator('nav [data-go="files"]').click()
+        page.click("#downloadFitBatch")
+        geo_restored=page.evaluate("window.__exports.at(-1)")
+        assert geo_restored["data"]==geo_batch["data"]
+        page.locator('nav [data-go="sim"]').click()
+        page.select_option("#positionMode","none")
+        page.click("#generate")
+        expect(page.locator("#summaryBody tr")).to_have_count(2)
+        page.locator('nav [data-go="files"]').click()
+        page.click("#downloadFitBatch")
+        local_batch=page.evaluate("window.__exports.at(-1)")
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(local_batch["data"]))) as z:
+            assert json.loads(z.read("manifest.json"))["contains_gps"] is False
+            with fitdecode.FitReader(io.BytesIO(z.read("SIM-1_SYNTHETIC.fit")),check_crc=fitdecode.CrcCheck.RAISE) as reader:
+                assert not any(f.name in ("position_lat","position_long") for m in reader if isinstance(m,fitdecode.FitDataMessage) and m.name=="record" for f in m.fields)
+
         assert not errors, errors
         # First install without permission: keep a visible map panel and recover via search.
         denied = browser.new_page(viewport={"width":390,"height":844},is_mobile=True,has_touch=True)
