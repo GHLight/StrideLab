@@ -26,6 +26,43 @@ function referenceTrackShape(marks){
  if(Math.max(...points.map(p=>Math.abs(p[1])))>100)for(const p of points){const x=p[0];p[0]=p[1];p[1]=-x;}
  return {points,closed:true,nominal_m:400,shape_ratio:ratio,source:'normalized_reference_shape'};
 }
+// Resample ordered LOCAL research geometry, preserving every original vertex.
+function interpolateLocalRoute(marks,closed=true,count=100,mode='linear',smoothness=.5){
+ if(!Array.isArray(marks)||marks.length>120||marks.length<(closed?3:2)||!marks.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)))throw Error('参考节点无效');
+ if(!Number.isInteger(count)||count<marks.length||count>120)throw Error('节点总数须在原始点数与120之间');
+ if(!['linear','smooth'].includes(mode)||!Number.isFinite(smoothness)||smoothness<0||smoothness>1)throw Error('插值参数无效');
+ const g=geometry(marks,closed),n=g.seg.length;
+ const extra=count-marks.length,parts=g.seg.map(s=>1+Math.floor(extra*s.d/g.len));
+ const fractions=g.seg.map((s,i)=>({i,rest:extra*s.d/g.len-Math.floor(extra*s.d/g.len)})).sort((a,b)=>b.rest-a.rest);
+ let left=count-(closed?0:1)-parts.reduce((a,b)=>a+b,0);
+ for(let i=0;i<left;i++)parts[fractions[i].i]++;
+ const at=i=>marks[closed?(i+marks.length)%marks.length:Math.max(0,Math.min(marks.length-1,i))];
+ const out=[];
+ for(let i=0;i<n;i++){
+   const a=at(i),b=at(i+1),prev=at(i-1),next=at(i+2);
+   const d=g.seg[i].d;
+   const tangent=(u,v)=>{const x=v[0]-u[0],y=v[1]-u[1],len=Math.hypot(x,y);return len?[x/len*d*smoothness,y/len*d*smoothness]:[0,0];};
+   const m0=tangent(prev,b),m1=tangent(a,next);
+   for(let j=0;j<parts[i];j++){
+     const t=j/parts[i];
+     out.push(a.map((v,k)=>{const linear=v+(b[k]-v)*t;if(mode==='linear'||!smoothness||j===0)return linear;
+       const t2=t*t,t3=t2*t;
+       return (2*t3-3*t2+1)*v+(t3-2*t2+t)*m0[k]+(-2*t3+3*t2)*b[k]+(t3-t2)*m1[k];}));
+   }
+ }
+ if(!closed)out.push(marks.at(-1).slice());
+ const result=geometry(out,closed);
+ if(crossing(out,closed))throw Error('插值后路线自相交，请调整节点或使用直线模式');
+ return {points:out,closed,length_m:result.len,mode,source:'local_research'};
+}
+function referenceLocalRoute(marks,closed,count,mode,smoothness){
+ if(!Array.isArray(marks)||marks.length>120||marks.length<(closed?3:2)||!marks.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&Math.abs(p[0])<=85&&Math.abs(p[1])<=180))throw Error('请沿参考路线依次添加有效标点');
+ const lat=marks.reduce((a,p)=>a+p[0],0)/marks.length,lon=marks[0][1],rad=Math.PI/180,scale=6371008.8*rad;
+ const xy=marks.map(p=>[(((p[1]-lon+540)%360)-180)*Math.cos(lat*rad)*scale,-(p[0]-lat)*scale]);
+ const mid=[0,1].map(i=>(Math.min(...xy.map(p=>p[i]))+Math.max(...xy.map(p=>p[i])))/2);
+ const local=xy.map(p=>p.map((v,i)=>v-mid[i]));
+ return interpolateLocalRoute(local,closed,count,mode,smoothness);
+}
 function geometry(points,closed){if(!Array.isArray(points)||points.length<(closed?3:2))throw Error('参考点数量不足');let seg=[],len=0;for(let i=0;i<points.length-(closed?0:1);i++){let a=points[i],b=points[(i+1)%points.length],d=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!Number.isFinite(d)||d<.05)throw Error('节点重合或非法');seg.push({a,b,d,start:len});len+=d;}if(len<5)throw Error('路线过短');return {seg,len,closed};}
 function crossing(points,closed){let n=points.length-(closed?0:1),out=0;const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);for(let i=0;i<n;i++)for(let j=i+2;j<n;j++){if(closed&&i===0&&j===n-1)continue;let a=points[i],b=points[(i+1)%points.length],c=points[j],d=points[(j+1)%points.length];if(cross(a,b,c)*cross(a,b,d)<0&&cross(c,d,a)*cross(c,d,b)<0)out++;}return out;}
 function pos(g,s){s=g.closed?((s%g.len)+g.len)%g.len:Math.max(0,Math.min(g.len,s));let v=g.seg.find(q=>s<=q.start+q.d)||g.seg.at(-1),f=(s-v.start)/v.d;return [v.a[0]+f*(v.b[0]-v.a[0]),v.a[1]+f*(v.b[1]-v.a[1])];}
@@ -36,5 +73,5 @@ let e=c.noise===0?[0,0]:[normal(r)*c.noise/Math.SQRT2,normal(r)*c.noise/Math.SQR
 function csv(rows){if(!rows.length)return '';let keys=Object.keys(rows[0]);return keys.join(',')+'\n'+rows.map(r=>keys.map(k=>typeof r[k]==='number'?String(Math.round(r[k]*1e6)/1e6):r[k]??'').join(',')).join('\n')+'\n';}
 const table=Array.from({length:256},(_,i)=>{for(let j=0;j<8;j++)i=(i&1)?0xedb88320^(i>>>1):i>>>1;return i>>>0;});function crc32(bytes){let c=0xffffffff;for(let b of bytes)c=table[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0;}
 function zip(files){let enc=new TextEncoder(),chunks=[],central=[],offset=0,clen=0;const make=n=>new Uint8Array(n),w=(a,p,n,v)=>{let d=new DataView(a.buffer);n===2?d.setUint16(p,v,true):d.setUint32(p,v,true);};for(let [name,value] of Object.entries(files)){let n=enc.encode(name),b=typeof value==='string'?enc.encode(value):value,crc=crc32(b),h=make(30+n.length);w(h,0,4,0x04034b50);w(h,4,2,20);w(h,6,2,2048);w(h,12,2,33);w(h,14,4,crc);w(h,18,4,b.length);w(h,22,4,b.length);w(h,26,2,n.length);h.set(n,30);chunks.push(h,b);let ch=make(46+n.length);w(ch,0,4,0x02014b50);w(ch,4,2,20);w(ch,6,2,20);w(ch,8,2,2048);w(ch,14,2,33);w(ch,16,4,crc);w(ch,20,4,b.length);w(ch,24,4,b.length);w(ch,28,2,n.length);w(ch,42,4,offset);ch.set(n,46);central.push(ch);clen+=ch.length;offset+=h.length+b.length;}let end=make(22);w(end,0,4,0x06054b50);w(end,8,2,central.length);w(end,10,2,central.length);w(end,12,4,clen);w(end,16,4,offset);let out=make(offset+clen+22),p=0;for(let b of [...chunks,...central,end]){out.set(b,p);p+=b.length;}return out;}
-const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,geometry,crossing,simulate,validate,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
+const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,geometry,crossing,simulate,validate,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
 })(globalThis);
