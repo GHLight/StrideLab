@@ -1,5 +1,12 @@
 name: Build and validate Android test APK
-on: [workflow_dispatch, push, pull_request]
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+concurrency:
+  group: stridelab-android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -33,7 +40,20 @@ jobs:
           gradle-version: '8.9'
       - run: node tests/core.test.js
       - run: python skills/synthetic-running-data/scripts/test_skill.py
-      - run: gradle --no-daemon :app:assembleDebug
+      - name: Compile APK with bounded retry for repository rate limiting
+        shell: bash
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon --max-workers=2 :app:assembleDebug 2>&1 | tee /tmp/stridelab-build.log; then
+              exit 0
+            fi
+            if ! grep -Eq '429|Too Many Requests|Read timed out|Connection reset' /tmp/stridelab-build.log; then
+              exit 1
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep "$((attempt*60))"; fi
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: StrideLab-debug-apk
