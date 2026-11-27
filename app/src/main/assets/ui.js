@@ -151,7 +151,7 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
 (()=>{
  const sim=$('sim'),analysis=$('analysis'),files=$('files');
  const intro=document.createElement('div');intro.className='card workflow-guide';
- intro.innerHTML='<h3>开始一个研究实验</h3><p class="hint">1. 场地参考与局部研究画布　2. 实验参数　3. 结果分析　4. 导出或备份</p><p class="hint">地图参考仅用于场地查看；合成样本使用独立的局部坐标。</p><button class="wide" id="dismissGuide">知道了</button>';
+ intro.innerHTML='<h3>开始一个研究实验</h3><p class="hint">1. 地图标点　2. 确认环形预览　3. 实验参数与生成　4. 分析及导出</p><p class="hint">在地图标点后先查看自动环形预览，再点击使用预览路线；不需要另外手画路线。</p><button class="wide" id="dismissGuide">知道了</button>';
  $('route').querySelector('.card').before(intro);try{intro.hidden=localStorage.getItem('stridelab.guide.seen')==='1';}catch(e){}
  $('dismissGuide').onclick=()=>{intro.hidden=true;try{localStorage.setItem('stridelab.guide.seen','1');}catch(e){}};
  const summary=document.createElement('div');summary.className='card';summary.innerHTML='<h3>生成前检查</h3><p id="preflightSummary" class="hint" aria-live="polite"></p><p id="preflightError" class="error" aria-live="polite"></p><p class="hint">仅检查局部实验几何、输入范围与计算规模，不代表实测运动质量。</p>';
@@ -183,4 +183,27 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
 (()=>{
  const button=document.createElement('button');button.id='downloadDeclaration';button.className='wide';button.textContent='导出数据使用声明 · TXT';$('fileAboutFold').querySelector('.card').append(button);
  button.onclick=()=>deliver('StrideLab_SYNTHETIC_DATA_NOTICE.txt',C.DECLARATION,'text/plain');
+})();
+
+/* Clear guided route workflow. Existing manual geometry tools stay available. */
+(()=>{
+ const local=$('routeSvg').closest('.card'),ref=$('geoInput').closest('.card');
+ const fold=(card,id,title)=>{const d=document.createElement('details');d.className='card export-fold';d.id=id;const s=document.createElement('summary');s.textContent=title;card.before(d);d.append(s,card);card.style.margin='8px 0 0';return d;};
+ fold(local,'manualRouteFold','高级：手动编辑局部路线（可选）');
+ fold(ref,'referenceExportFold','高级：保存和导出地图参考坐标');
+ const mapCard=$('mapEnable').closest('.card');mapCard.querySelector('h3').textContent='① 地图标点';
+ $('route').querySelector('h2').textContent='场地编辑';
+ $('route').querySelector('p.muted').textContent='沿场地边缘标点 → 检查环形预览 → 使用路线配置实验。';
+ $('route').querySelector('button[data-go="sim"]').textContent='使用当前局部路线 →';
+ const active=document.createElement('div');active.className='card';active.id='activeRouteCard';
+ active.innerHTML='<h3>③ 本次使用的研究路线</h3><div class="canvas"><svg id="activeRoutePreview" viewBox="-125 -110 250 220" aria-label="当前研究路线预览"></svg></div><p id="activeRouteInfo" class="hint"></p><button id="changeActiveRoute" class="wide">返回场地修改路线</button>';
+ $('sim').querySelector('p.muted').after(active);
+ const renderActive=()=>{const svg=$('activeRoutePreview');svg.replaceChildren();try{const g=C.geometry(points,closed);const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',path(points,closed));p.setAttribute('fill',closed?'#b9ceb833':'none');p.setAttribute('stroke','#416c55');p.setAttribute('stroke-width','2');svg.append(p);$('activeRouteInfo').textContent=(closed?'闭合':'开放')+'局部路线 · '+g.len.toFixed(1)+' 米 · '+points.length+' 个节点。生成与分析使用同一几何。';}catch(e){$('activeRouteInfo').textContent=e.message;}};
+ const oldGo=go;go=function(id,record=true){oldGo(id,record);if(id==='sim')renderActive();};
+ const oldRoute=renderRoute;renderRoute=function(){oldRoute();renderActive();};
+ $('changeActiveRoute').onclick=()=>go('route');renderActive();
+ const formatNotice=document.createElement('div');formatNotice.className='card';formatNotice.innerHTML='<h3>导出内容一览</h3><p class="hint">研究 ZIP / CSV：含逐点理想与观测局部轨迹坐标。普通 FIT / TCX：含运动指标和实验时间，不含地理 GPS，因此第三方地图不会绘制路径。地图参考 GeoJSON：仅含标点，不是运动记录。</p><button id="exportLocalPreview" class="wide" disabled>导出所选轨迹图 · SVG</button>';
+ $('fileStatus').closest('.card').after(formatNotice);
+ $('exportLocalPreview').onclick=()=>{const s=sessions[Number($('fileSampleSelect').value)];if(!s)return;renderSample();const trace=$('trace').innerHTML;deliver(s.id+'_SYNTHETIC_LOCAL_TRACE.svg','<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 260"><rect width="320" height="260" fill="#fcfcf8"/>'+trace+'<text x="10" y="245" font-size="10" fill="#405f50">SYNTHETIC RESEARCH / LOCAL METRES / NO GPS</text></svg>','image/svg+xml');};
+ const previousShow=showResults;showResults=function(){previousShow();$('exportLocalPreview').disabled=!sessions.length;};$('exportLocalPreview').disabled=!sessions.length;
 })();
