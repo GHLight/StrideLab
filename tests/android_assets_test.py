@@ -314,6 +314,7 @@ try:
         page.locator('nav [data-go="sim"]').click()
         page.select_option("#positionMode","none")
         page.click("#generate")
+        expect(page.locator("#analysis")).to_be_visible(timeout=30000)
         expect(page.locator("#summaryBody tr")).to_have_count(2)
         page.locator('nav [data-go="files"]').click()
         page.click("#downloadFitBatch")
