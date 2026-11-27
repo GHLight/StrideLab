@@ -1,4 +1,4 @@
-/* Synthetic session export. Local coordinates are never encoded as GPS. */
+/* Synthetic research export. Geographic rows require explicit WGS84 synthetic provenance. */
 (function(root){'use strict';
 const LABEL='SYNTHETIC_RESEARCH',EPOCH=Date.UTC(1989,11,31)/1000;
 function checked(session,timeline){
@@ -22,7 +22,7 @@ function encodeFit(session,timeline,positions=null){
  const active=s.rows.slice(1),avg=k=>active.reduce((a,r)=>a+r[k],0)/active.length,max=k=>active.reduce((a,r)=>Math.max(a,r[k]),0),hr=Math.round(avg('hr_bpm')),cad=Math.round(avg('cadence_spm')/2),cycles=Math.round(active.reduce((a,r,i)=>a+r.cadence_spm*(r.t-s.rows[i].t)/120,0));
  define(0,0,[f(0,E),f(1,H),f(2,H),f(3,140),f(4,U),f(8,7,32)]);msg(0,[4,255,0,session.seed||1,t0,LABEL]);
  define(1,21,[f(253,U),f(0,E),f(1,E)]);msg(1,[t0,0,0]);
- const semicircle=n=>Math.round(n*2147483648/180);
+ const semicircle=n=>Math.max(-2147483648,Math.min(2147483646,Math.round(n*2147483648/180)));
  define(2,20,[f(253,U),f(5,U),f(6,H),f(3,B),f(4,B),...(positions?[f(0,133),f(1,133)]:[])]);
  for(const [i,r] of s.rows.entries())msg(2,[t0+r.t,Math.round(r.distance_m*100),Math.round(r.speed_mps*1000),Math.round(r.hr_bpm),Math.round(r.cadence_spm/2),...(positions?positions[i].map(semicircle):[])]);
  msg(1,[t1,0,4]);
@@ -36,7 +36,7 @@ function encodeFit(session,timeline,positions=null){
 function encodeTcx(session,timeline,positions=null){
  const s=checked(session,timeline),stamp=t=>new Date((s.start+t)*1000).toISOString(),num=n=>String(Math.round(n*1e6)/1e6);
  const track=s.rows.map((r,i)=>'<Trackpoint><Time>'+stamp(r.t)+'</Time>'+(positions?'<Position><LatitudeDegrees>'+num(positions[i][0])+'</LatitudeDegrees><LongitudeDegrees>'+num(positions[i][1])+'</LongitudeDegrees></Position>':'')+'<DistanceMeters>'+num(r.distance_m)+'</DistanceMeters><HeartRateBpm><Value>'+Math.round(r.hr_bpm)+'</Value></HeartRateBpm><Cadence>'+Math.round(r.cadence_spm/2)+'</Cadence><Extensions><ns3:TPX><ns3:Speed>'+num(r.speed_mps)+'</ns3:Speed><ns3:RunCadence>'+Math.round(r.cadence_spm/2)+'</ns3:RunCadence></ns3:TPX></Extensions></Trackpoint>').join('');
- return '<?xml version="1.0" encoding="UTF-8"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"><Activities><Activity Sport="Running"><Id>'+stamp(0)+'</Id><Lap StartTime="'+stamp(0)+'"><TotalTimeSeconds>'+s.seconds+'</TotalTimeSeconds><DistanceMeters>'+num(s.distance)+'</DistanceMeters><Calories>0</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>'+track+'</Track><Notes>'+LABEL+' - simulated, not measured; cadence is cycles/minute; calories unavailable</Notes></Lap><Notes>'+LABEL+(positions?' - fixed ocean coordinate parser fixture, not measured activity':' - model distance, no GPS position; not measured activity')+'</Notes></Activity></Activities></TrainingCenterDatabase>';
+ return '<?xml version="1.0" encoding="UTF-8"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"><Activities><Activity Sport="Running"><Id>'+stamp(0)+'</Id><Lap StartTime="'+stamp(0)+'"><TotalTimeSeconds>'+s.seconds+'</TotalTimeSeconds><DistanceMeters>'+num(s.distance)+'</DistanceMeters><Calories>0</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>'+track+'</Track><Notes>'+LABEL+' - simulated, not measured; cadence is cycles/minute; calories unavailable</Notes></Lap><Notes>'+LABEL+(positions?(session.position_source==='synthetic_map_reference'?' - synthetic geographic research, map-derived coordinates, not measured activity':' - fixed ocean coordinate parser fixture, not measured activity'):' - model distance, no GPS position; not measured activity')+'</Notes></Activity></Activities></TrainingCenterDatabase>';
 }
 // This fixed, non-user-configurable coordinate fixture is separate from all
 // sessions and reference maps. The points lie in the open Pacific.
@@ -48,8 +48,17 @@ function gpsFixture(){
  const timeline={sample_id:'FIXTURE',synthetic:true,scenario_start:'2030-01-01T00:00:00Z',scenario_end:'2030-01-01T00:00:30Z'};
  return {session,timeline,positions};
 }
-function fit(session,timeline){return encodeFit(session,timeline);}
-function tcx(session,timeline){return encodeTcx(session,timeline);}
+function researchPositions(session){
+ if(!session||!Array.isArray(session.rows))throw Error('没有可导出的样本');
+ if(session.position_source===undefined||session.position_source==='none'){
+   if(session.rows.some(r=>r.latitude_deg!==undefined||r.longitude_deg!==undefined))throw Error('缺少合成地理来源标识');
+   return null;
+ }
+ if(session.position_source!=='synthetic_map_reference'||session.summary?.position_source!==session.position_source)throw Error('地理研究来源标识不一致');
+ return session.rows.map(r=>{if(r.position_source!==session.position_source||!Number.isFinite(r.latitude_deg)||!Number.isFinite(r.longitude_deg)||Math.abs(r.latitude_deg)>90||r.longitude_deg< -180||r.longitude_deg>=180)throw Error('合成经纬度无效');return [r.latitude_deg,r.longitude_deg];});
+}
+function fit(session,timeline){return encodeFit(session,timeline,researchPositions(session));}
+function tcx(session,timeline){return encodeTcx(session,timeline,researchPositions(session));}
 function gpsFixtureFit(){const g=gpsFixture();return encodeFit(g.session,g.timeline,g.positions);}
 function gpsFixtureTcx(){const g=gpsFixture();return encodeTcx(g.session,g.timeline,g.positions);}
 const api={fit,tcx,checked,gpsFixtureFit,gpsFixtureTcx};if(typeof module!=='undefined')module.exports=api;else root.StrideFormats=api;
