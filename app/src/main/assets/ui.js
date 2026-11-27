@@ -112,3 +112,37 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
   hint.textContent='已请求导出 '+s.id+' 的合成 '+format.toUpperCase()+' 文件；请在系统文件选择器中完成保存。';
  }catch(e){hint.textContent='导出失败：'+e.message;}};
 })();
+
+/* File-center layout: preserve existing handlers while grouping by purpose. */
+(()=>{
+ const page=$('files'),original=$('fileStatus').closest('.card'),about=$('declaration').closest('.card');
+ const archive=$('projectHistory').closest('.card'),fixture=$('exportFitFixture').closest('.card'),gps=$('exportGpsFixtureFit').closest('.card');
+ const sampleBox=$('fileSampleSelect').closest('.field').parentElement;
+ const formats=$('downloadFitOne').parentElement;
+ const singleZip=$('downloadOne').closest('.fileitem'),fullZip=$('download').closest('.fileitem'),summary=$('downloadSummary').closest('.fileitem'),configRow=$('downloadConfig').closest('.fileitem');
+ const makeCard=(title,caption)=>{const card=document.createElement('div');card.className='card export-card';const h=document.createElement('h3');h.textContent=title;card.append(h);if(caption){const p=document.createElement('p');p.className='hint';p.textContent=caption;card.append(p);}return card;};
+ const collapse=(title,child,id)=>{const d=document.createElement('details');d.className='card export-fold';d.id=id;const s=document.createElement('summary');s.textContent=title;d.append(s,child);return d;};
+ original.classList.add('export-overview');original.querySelector('h3').textContent='当前实验';original.querySelector('h3').after($('fileStatus'));
+ const batch=makeCard('批量导出','将本次实验的全部合成样本导出为研究数据包。');
+ batch.innerHTML+='<button id="downloadFitBatch" class="primary wide" disabled>FIT 文件集合 · ZIP</button><p id="batchExportInfo" class="hint" aria-live="polite"></p>';
+ batch.append(fullZip,summary);
+ const single=makeCard('单条样本','选择样本，再选择所需的文件格式。');
+ single.append(sampleBox,formats,$('sessionFormatStatus'),singleZip);
+ const configFold=collapse('实验配置与项目历史',archive,'fileHistoryFold');
+ archive.prepend(configRow);archive.querySelector('h3').textContent='本地项目';
+ const testContainer=document.createElement('div');testContainer.append(fixture,gps);
+ const testFold=collapse('高级工具 · 格式测试',testContainer,'fileTestFold');
+ const aboutFold=collapse('数据来源与使用说明',about,'fileAboutFold');
+ page.append(original,batch,single,configFold,testFold,aboutFold);
+ const update=()=>{const ready=!!sessions.length&&!!runSnapshot?.scenario_timeline&&sessions.every(s=>runSnapshot.scenario_timeline.some(t=>t.sample_id===s.id));$('downloadFitBatch').disabled=!ready;for(const id of ['downloadFitOne','downloadTcxOne'])$(id).disabled=!ready;$('downloadFitBatch').textContent=ready?'导出 '+sessions.length+' 个 FIT · ZIP':'FIT 文件集合 · ZIP';$('batchExportInfo').textContent=ready?'每个样本独立保存，附合成来源清单；不含GPS坐标。':sessions.length?'该历史实验缺少完整时间轴，无法导出 FIT。':'生成实验后可导出。';};
+ const oldShow=showResults;showResults=function(){oldShow();update();};update();
+ $('downloadFitBatch').onclick=()=>{try{
+  if(!sessions.length||!runSnapshot?.scenario_timeline)throw Error('没有可导出的合成实验');
+  const files={},entries=[];
+  for(const s of sessions){const timeline=runSnapshot.scenario_timeline.find(t=>t.sample_id===s.id);if(!/^SIM-[0-9]+$/.test(s.id))throw Error('无效样本编号');const name=s.id+'_SYNTHETIC.fit';if(Object.hasOwn(files,name))throw Error('重复样本编号');const bytes=StrideFormats.fit(s,timeline);files[name]=bytes;entries.push({name,sample_id:s.id,synthetic:true,position_source:'none',size_bytes:bytes.length});}
+  files['manifest.json']=JSON.stringify({schema:'stridelab.fit-research-bundle.v1',synthetic:true,contains_gps:false,engine:C.VERSION,count:entries.length,files:entries,declaration:C.DECLARATION},null,2);
+  files['用途声明.txt']=C.DECLARATION;
+  deliver('StrideLab_SYNTHETIC_FIT.zip',C.zip(files),'application/zip');
+  $('batchExportInfo').textContent='已请求导出 '+entries.length+' 个合成 FIT 文件，请在系统文件选择器中完成保存。';
+ }catch(e){$('batchExportInfo').textContent='导出失败：'+e.message;}};
+})();
