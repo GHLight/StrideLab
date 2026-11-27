@@ -166,7 +166,30 @@ try:
         selected_xml=ET.fromstring(base64.b64decode(selected_exports[1]["data"]))
         ns={"t":"http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
         assert selected_xml.find('.//t:TotalTimeSeconds',ns).text == '720'
+        expect(page.locator("#downloadFitBatch")).to_have_text("导出 3 个 FIT · ZIP")
+        assert not page.locator("#fileTestFold").evaluate("(el)=>el.open")
+        assert not page.locator("#fileHistoryFold").evaluate("(el)=>el.open")
         page.screenshot(path=str(OUT / "files-selected-exports.png"), full_page=True)
+        page.click("#downloadFitBatch")
+        batch = page.evaluate("window.__exports.at(-1)")
+        assert batch["name"] == "StrideLab_SYNTHETIC_FIT.zip" and batch["mime"] == "application/zip"
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(batch["data"]))) as z:
+            assert z.testzip() is None
+            manifest = json.loads(z.read("manifest.json"))
+            assert manifest["synthetic"] is True and manifest["contains_gps"] is False and manifest["count"] == 3
+            assert set(z.namelist()) == {"SIM-1_SYNTHETIC.fit","SIM-2_SYNTHETIC.fit","SIM-3_SYNTHETIC.fit","manifest.json","用途声明.txt"}
+            for entry in manifest["files"]:
+                data=z.read(entry["name"])
+                assert len(data)==entry["size_bytes"]
+                assert entry["synthetic"] is True and entry["position_source"]=="none"
+                with fitdecode.FitReader(io.BytesIO(data),check_crc=fitdecode.CrcCheck.RAISE) as reader:
+                    ms=[f for f in reader if isinstance(f,fitdecode.FitDataMessage)]
+                session=next(m for m in ms if m.name=="session")
+                assert session.get_value("total_distance")==2000
+                assert session.get_value("sport_profile_name")=="SYNTHETIC_RESEARCH"
+                assert not any(f.name in ("position_lat","position_long") for m in ms if m.name=="record" for f in m.fields)
+            assert z.read("SIM-2_SYNTHETIC.fit")==base64.b64decode(selected_exports[0]["data"])
+        page.locator("#fileTestFold > summary").click()
         # Fixed compatibility fixtures remain separate from current-session exports.
         page.click("#exportFitFixture")
         page.click("#exportTcxFixture")
@@ -186,6 +209,7 @@ try:
         assert not xml.findall(".//t:Position", ns)
         assert "SYNTHETIC_RESEARCH" in "".join(xml.itertext())
         # Verify a second experiment cannot replace the first archive.
+        page.locator('#fileHistoryFold > summary').click()
         expect(page.locator("#projectHistory option")).to_have_count(1)
         page.click("#projectBackup")
         backup = json.loads(base64.b64decode(page.evaluate("window.__exports.at(-1).data")))
