@@ -4,8 +4,17 @@ from pathlib import Path
 OUT=Path('test-evidence');OUT.mkdir(exist_ok=True)
 def adb(*args):return subprocess.check_output(['adb',*args],text=True)
 def tree():
-    adb('shell','uiautomator','dump','/sdcard/stride-workflow.xml')
-    return ET.fromstring(adb('shell','cat','/sdcard/stride-workflow.xml'))
+    # Accessibility may not be ready immediately after a cold restart.
+    # Remove the old dump so a transient failure cannot pass on stale UI.
+    for attempt in range(10):
+        adb('shell','rm','-f','/sdcard/stride-workflow.xml')
+        try:
+            adb('shell','uiautomator','dump','/sdcard/stride-workflow.xml')
+            return ET.fromstring(adb('shell','cat','/sdcard/stride-workflow.xml'))
+        except (subprocess.CalledProcessError,ET.ParseError):
+            if attempt==9:raise
+            time.sleep(1)
+
 def center(n):
     v=list(map(int,re.findall(r'\d+',n.get('bounds',''))))
     if len(v)!=4 or v[2]<=v[0] or v[3]<=v[1]:return None
