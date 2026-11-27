@@ -48,9 +48,18 @@ for permission in ['android.permission.ACCESS_FINE_LOCATION','android.permission
     adb('shell','pm','revoke','lab.stridelab',permission)
     adb('shell','pm','set-permission-flags','lab.stridelab',permission,'user-set','user-fixed')
 adb('shell','am','force-stop','lab.stridelab');adb('shell','am','start','-W','-n','lab.stridelab/.MainActivity');time.sleep(2)
-root=tree()
-assert any(n.get('text')=='地图参考选点' or n.get('content-desc')=='地图参考选点' for n in root.iter('node')),'Map region disappeared after location denial'
-assert any('尚未确定地图位置' in n.get('text','') for n in root.iter('node')),'Location recovery prompt missing'
+# The generic div's aria-label is not consistently exposed by Android WebView.
+# Require the visible recovery text inside the map, after scrolling it into view.
+visible_prompt=False
+for attempt in range(12):
+    root=tree()
+    if any('尚未确定地图位置' in n.get('text','') and center(n) and 30<center(n)[1]<530 for n in root.iter('node')):
+        visible_prompt=True
+        break
+    adb('shell','input','swipe','6','490','6','170','350')
+    time.sleep(.5)
+capture('android-map-location-denied')
+assert visible_prompt,'Visible location recovery prompt missing from map region'
 web=next(n for n in root.iter('node') if n.get('class')=='android.webkit.WebView')
 assert int(re.findall(r'\d+',web.get('bounds'))[1])>=20,'WebView overlaps status bar'
 capture('android-map-location-denied')
