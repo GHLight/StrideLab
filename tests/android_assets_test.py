@@ -24,8 +24,19 @@ try:
         page = browser.new_page(viewport={"width":390,"height":844}, is_mobile=True, has_touch=True)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.add_init_script("""window.__exports=[]; window.StrideAndroid={save:(name,mime,data)=>window.__exports.push({name,mime,data}),locate:()=>{}};""")
+        page.add_init_script("""window.__exports=[]; window.StrideAndroid={save:(name,mime,data)=>window.__exports.push({name,mime,data}),locate:()=>setTimeout(()=>window.StrideMapLocation(30,120),0)};""")
+        page.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(status=200, content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=")))
         page.goto(f"http://127.0.0.1:{server.server_port}/index.html")
+        expect(page.locator("#currentLocationMarker")).to_have_count(1)
+        expect(page.locator("#mapAdd")).to_be_enabled()
+        page.click("#mapAdd")
+        expect(page.locator("#mapCount")).to_have_text("1")
+        page.click("#mapUndo")
+        expect(page.locator("#mapCount")).to_have_text("0")
+        page.click("#mapRedo")
+        expect(page.locator("#mapCount")).to_have_text("1")
+        page.reload()
+        expect(page.locator("#mapCount")).to_have_text("1")
         expect(page.locator("#npts")).to_have_text("26")
         page.screenshot(path=str(OUT/"route.png"), full_page=True)
         page.click("#clear")
@@ -42,6 +53,7 @@ try:
         page.fill("#fixedStart","30")
         page.fill("#noise","0")
         page.screenshot(path=str(OUT/"simulation.png"), full_page=True)
+        assert page.evaluate("""() => {const c={...config(),scenarioGapMode:"range",scenarioGapMin:1,scenarioGapMax:3,count:10};const a=scenarioTimeline(c);return JSON.stringify(a)===JSON.stringify(scenarioTimeline(c))&&a.slice(1).every(r=>r.interval_days>=1&&r.interval_days<=3);}""")
         page.click("#generate")
         expect(page.locator("#results")).to_be_visible(timeout=30000)
         expect(page.locator("#summaryBody tr")).to_have_count(3)
@@ -87,6 +99,11 @@ try:
             assert sorted(original_zip.namelist()) == sorted(restored_zip.namelist())
             for name in original_zip.namelist():
                 assert original_zip.read(name) == restored_zip.read(name), name
+        page.select_option("#fileSampleSelect","1")
+        page.click("#downloadCsvOne")
+        csv_export = page.evaluate("window.__exports.at(-1)")
+        assert csv_export["name"] == "SIM-2_SYNTHETIC.csv"
+        assert all(r["synthetic"] == "true" for r in csv.DictReader(io.StringIO(base64.b64decode(csv_export["data"]).decode())))
         # FIT and TCX are standalone fixed synthetic fixtures, not exports of the current experiment.
         page.click("#exportFitFixture")
         page.click("#exportTcxFixture")
