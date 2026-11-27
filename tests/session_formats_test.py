@@ -104,3 +104,11 @@ for m,r,x in zip(records,g['session']['rows'],track):
 with fitdecode.FitReader(io.BytesIO(base64.b64decode(g['ordinary'])),check_crc=fitdecode.CrcCheck.RAISE) as reader:
     assert not any(f.name in ('position_lat','position_long') for m in reader if isinstance(m,fitdecode.FitDataMessage) and m.name=='record' for f in m.fields)
 print('PASS: geographic synthetic research FIT/TCX coordinates, cadence, HR, time and no-GPS separation')
+
+# All ordinary and geographic exports use the FIT 1.x header and standard
+# field definitions. Independently check the header size and payload length.
+for encoded in [*(c['fit'] for c in cases),g['fit'],g['ordinary'],gps['fit']]:
+    raw=base64.b64decode(encoded)
+    assert raw[0]==14 and raw[1]==0x10 and raw[8:12]==b'.FIT'
+    assert int.from_bytes(raw[4:8],'little')==len(raw)-16
+print('PASS: FIT 1.0 headers for selected, geographic and no-GPS exports')
