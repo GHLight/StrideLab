@@ -253,25 +253,30 @@ try:
         assert notice["name"]=="StrideLab_SYNTHETIC_DATA_NOTICE.txt"
         with zipfile.ZipFile(io.BytesIO(base64.b64decode(batch["data"]))) as z:
             assert base64.b64decode(notice["data"])==z.read("用途声明.txt")
-        # The saved reference draft produces a separate normalized loop.
+        # The saved reference draft produces an adjustable interpolated local route.
         page.locator('nav [data-go="route"]').click()
         expect(page.locator("#mapCount")).to_have_text("3")
         expect(page.locator("#mapShapePreview")).to_be_visible()
         expect(page.locator("#mapShapeStatus")).to_contain_text("3 个标点")
+        page.fill("#mapInterpolationCount","80")
+        page.select_option("#mapInterpolation","smooth")
+        expect(page.locator("#mapShapeStatus")).to_contain_text("80 个插值节点")
+        page.select_option("#mapInterpolation","linear")
+        expect(page.locator("#mapShapeStatus")).to_contain_text("80 个插值节点")
         preview=page.locator("#mapShapePreview path").get_attribute("d")
         page.click("#mapUseShape")
         expect(page.locator("#sim")).to_be_visible()
-        expect(page.locator("#activeRouteInfo")).to_contain_text("400.0 米")
+        expect(page.locator("#activeRouteInfo")).to_contain_text("80 个节点")
         assert page.locator("#activeRoutePreview path").get_attribute("d")==preview
         page.click("#changeActiveRoute")
         if not page.locator("#manualRouteFold").evaluate("(el)=>el.open"):
             page.locator("#manualRouteFold > summary").click()
-        expect(page.locator("#npts")).to_have_text("50")
-        expect(page.locator("#len")).to_have_text("400.0")
+        expect(page.locator("#npts")).to_have_text("80")
+        assert 65 < float(page.locator("#len").inner_text()) < 90
         page.click("#undo")
         expect(page.locator("#npts")).to_have_text("26")
         page.click("#redo")
-        expect(page.locator("#npts")).to_have_text("50")
+        expect(page.locator("#npts")).to_have_text("80")
         assert not errors, errors
         # First install without permission: keep a visible map panel and recover via search.
         denied = browser.new_page(viewport={"width":390,"height":844},is_mobile=True,has_touch=True)
