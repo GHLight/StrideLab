@@ -1,0 +1,7 @@
+用途声明 / SYNTHETIC DATA NOTICE
+
+本文件包内的跑步轨迹、时间、距离、心率、步数、步频、步幅、触地时间、垂直振幅及其他指标均为程序生成的合成数据，并非实际运动或人体传感器实测记录。地理坐标如来自用户提供的参考点，仅用于模拟场地建模，不代表实际发生的运动。
+
+数据仅用作学习交流、教学演示、统计分析、算法研究及授权的软件测试，不可用于真实评测、运动考核、考勤、赛事成绩或其他要求真实记录的用途。引用数据时请明确说明其合成来源，保留此声明及生成清单。
+
+Synthetic data for education, research simulation and authorized software testing only. Not measured activity. Not for real-world evaluation.
