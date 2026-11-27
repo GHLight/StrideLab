@@ -53,19 +53,24 @@
   const library=document.createElement('details');library.className='reference-library';library.innerHTML='<summary>场地收藏</summary><label class="field"><span>场地名称</span><input id="referenceName" maxlength="60" placeholder="例如：学校操场"></label><button class="wide" id="referenceFavorite">收藏当前参考路线</button><label class="field"><span>已收藏场地</span><select id="referenceSaved"><option value="">暂无收藏</option></select></label><div class="toolbar"><button id="referenceOpen">打开场地</button><button id="referenceRemove">删除收藏</button></div><p class="hint" id="referenceLibraryStatus"></p>';
   $('mapSave').closest('.toolbar').after(library);
   const shapeCard=document.createElement('div');shapeCard.className='card';shapeCard.style.boxShadow='none';
-  shapeCard.innerHTML='<h3>② 自动环形路线预览</h3><p class="hint">地图上的虚线只是参考标点连线。下图才是从形状拟合出的独立局部研究路线。</p><div id="mapShapePreviewBox" class="canvas" hidden><svg id="mapShapePreview" viewBox="-125 -110 250 220" aria-label="标准化环形研究预览"></svg></div><p id="mapShapeStatus" class="hint" aria-live="polite">请先添加至少三个分散的参考点。</p><button id="mapUseShape" class="primary wide" disabled>使用预览路线并配置模拟 →</button><p class="hint">此操作替换当前局部路线，可撤销；不改变历史实验。模型归一至400米，不含地理 GPS。</p>';
+  shapeCard.innerHTML='<h3>② 路线插值与预览</h3><p class="hint">沿路线依次标点，推荐4–10个；弯道多添加贴合场地的标点。地图虚线是原始参考连线。下图显示保留原形状及尺度的局部研究路线。</p><label class="field"><span>插值方式</span><select id="mapInterpolation"><option value="linear">直线插值</option><option value="smooth">平滑插值</option></select></label><label class="field"><span>节点总数（含原标点）</span><input id="mapInterpolationCount" type="number" min="3" max="120" step="1" value="60"></label><label id="mapSmoothWrap" class="field" hidden><span>平滑程度</span><input id="mapSmoothness" type="range" min="0" max="100" step="5" value="50"></label><div id="mapShapePreviewBox" class="canvas" hidden><svg id="mapShapePreview" viewBox="-125 -110 250 220" aria-label="局部路线插值预览"></svg></div><p id="mapShapeStatus" class="hint" aria-live="polite">请先添加参考标点。</p><button id="mapUseShape" class="primary wide" disabled>使用预览路线并配置模拟 →</button><p class="hint">此操作替换当前局部路线，可撤销；不改变历史实验。局部研究路线不含地理锚点。</p>';
   $('mapAdd').closest('.toolbar').after(shapeCard);
   let shapeKey=null,shapeResult=null;
   function refreshShape(){
-    const key=JSON.stringify(snapshotRef());if(key===shapeKey)return;shapeKey=key;shapeResult=null;
+    const count=$('mapInterpolationCount'),mode=$('mapInterpolation').value;
+    count.min=String(Math.max(nodes.length,$('mapClosed').checked?3:2));
+    $('mapSmoothWrap').hidden=mode!=='smooth';
+    const key=JSON.stringify([snapshotRef(),count.value,mode,$('mapSmoothness').value]);if(key===shapeKey)return;shapeKey=key;shapeResult=null;
     $('mapUseShape').disabled=true;$('mapShapePreviewBox').hidden=true;$('mapShapePreview').replaceChildren();
-    try{if(!$('mapClosed').checked)throw Error('请勾选闭合参考路径');shapeResult=C.referenceTrackShape(nodes);
-      const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',path(shapeResult.points,true));p.setAttribute('fill','#b9ceb833');p.setAttribute('stroke','#416c55');p.setAttribute('stroke-width','2.2');p.setAttribute('stroke-linejoin','round');$('mapShapePreview').append(p);
+    try{shapeResult=C.referenceLocalRoute(nodes,$('mapClosed').checked,Number(count.value),mode,Number($('mapSmoothness').value)/100);
+      const svg=$('mapShapePreview');svg.setAttribute('viewBox',localViewBox(shapeResult.points));
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',path(shapeResult.points,shapeResult.closed));p.setAttribute('fill',shapeResult.closed?'#b9ceb833':'none');p.setAttribute('stroke','#416c55');p.setAttribute('stroke-width','2.2');p.setAttribute('vector-effect','non-scaling-stroke');p.setAttribute('stroke-linejoin','round');svg.append(p);
       $('mapShapePreviewBox').hidden=false;$('mapUseShape').disabled=false;
-      $('mapShapeStatus').textContent=nodes.length+' 个标点 → '+shapeResult.points.length+' 个拟合节点 · 400.0 米闭合局部模型。确认形状后点击下方按钮。';
+      $('mapShapeStatus').textContent=nodes.length+' 个标点 → '+shapeResult.points.length+' 个插值节点 · '+shapeResult.length_m.toFixed(1)+' 米'+(shapeResult.closed?'闭合':'开放')+'局部模型。';
     }catch(e){$('mapShapeStatus').textContent=e.message;}
   }
-  $('mapUseShape').onclick=()=>{try{if(busy)throw Error('请先结束当前生成任务');if(!shapeResult)throw Error('尚未生成有效预览');mutate(()=>{points=shapeResult.points.map(p=>p.slice());closed=true;selected=-1;});$('mapShapeStatus').textContent='已应用此预览路线，可在高级路线编辑中撤销。';go('sim');window.scrollTo(0,0);}catch(e){$('mapShapeStatus').textContent=e.message;}};
+  for(const id of ['mapInterpolation','mapInterpolationCount','mapSmoothness'])$(id).addEventListener('input',refreshShape);
+  $('mapUseShape').onclick=()=>{try{if(busy)throw Error('请先结束当前生成任务');if(!shapeResult)throw Error('尚未生成有效预览');mutate(()=>{points=shapeResult.points.map(p=>p.slice());closed=shapeResult.closed;selected=-1;});$('mapShapeStatus').textContent='已应用此预览路线，可在高级路线编辑中撤销。';go('sim');window.scrollTo(0,0);}catch(e){$('mapShapeStatus').textContent=e.message;}};
   function libraryRead(){const v=JSON.parse(localStorage.getItem(libraryKey)||'[]');if(!Array.isArray(v)||v.length>50)throw Error('收藏数据无效');return v;}
   function libraryWrite(v){if(v.length>50)throw Error('最多收藏50个场地');localStorage.setItem(libraryKey,JSON.stringify(v));}
   function libraryRender(){try{const list=libraryRead(),select=$('referenceSaved'),old=select.value;select.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent=list.length?'选择收藏场地':'暂无收藏';select.append(empty);for(const item of list){const op=document.createElement('option');op.value=item.id;op.textContent=item.name+' · '+item.nodes.length+' 点';select.append(op);}if(list.some(v=>v.id===old))select.value=old;$('referenceOpen').disabled=$('referenceRemove').disabled=!select.value;$('referenceLibraryStatus').textContent=list.length+' 个本地收藏；不参与合成运动生成。';}catch(e){$('referenceLibraryStatus').textContent=e.message;}}
