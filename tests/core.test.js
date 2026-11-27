@@ -35,3 +35,18 @@ const research=C.simulate({...c,noise:0},ref.points,true,0);
 assert.ok(Math.abs(research.summary.route_length_m-ref.length_m)<1e-8);
 assert.equal(research.rows.length,721);
 console.log('PASS: ordered local interpolation, vertex preservation, adjustable point count, actual local scale and simulation integration');
+
+const sweep={...c,positionMode:'none',distanceSpreadM:100};
+const cases=Array.from({length:sweep.count},(_,i)=>C.simulateResearch(sweep,p,true,i));
+assert.equal(new Set(cases.map(s=>s.summary.target_distance_m)).size,sweep.count);
+for(const [i,s] of cases.entries()){
+ assert.ok(s.summary.target_distance_m>=1900&&s.summary.target_distance_m<=2100);
+ assert.ok(Math.abs(s.summary.model_distance_m-s.summary.target_distance_m)<1e-6);
+ assert.equal(s.summary.seconds,Math.round(C.sampleConfig(sweep,i).distance*sweep.pace*60));
+ assert.deepEqual(s,C.simulateResearch(sweep,p,true,i));
+ assert.ok(s.rows.every(r=>!('latitude_deg' in r)&&!('longitude_deg' in r)));
+}
+assert.throws(()=>C.validate({...sweep,distanceSpreadM:2000}));
+assert.throws(()=>C.validate({...sweep,positionMode:'geo'}));
+assert.deepEqual(C.simulateResearch({...c,positionMode:'none',distanceSpreadM:0},p,true,0),C.simulate(c,p,true,0));
+console.log('PASS: local distance sweeps, exact integration, no-GPS separation, reproducible targets and legacy behavior');
