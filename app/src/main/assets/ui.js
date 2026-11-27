@@ -89,7 +89,22 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
   const bytes=[14,32];put(bytes,2100,2);put(bytes,data.length,4);bytes.push(46,70,73,84);put(bytes,crc(bytes),2);bytes.push(...data);put(bytes,crc(bytes),2);return Uint8Array.from(bytes);
  }
  function tcx(){const time=i=>new Date(start+i*1000).toISOString();let track='';for(let i=0;i<=30;i++)track+='<Trackpoint><Time>'+time(i)+'</Time><DistanceMeters>'+ (i*5/3).toFixed(3)+'</DistanceMeters><HeartRateBpm><Value>100</Value></HeartRateBpm><Cadence>80</Cadence></Trackpoint>';return '<?xml version="1.0" encoding="UTF-8"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"><Activities><Activity Sport="Running"><Id>'+time(0)+'</Id><Lap StartTime="'+time(0)+'"><TotalTimeSeconds>30</TotalTimeSeconds><DistanceMeters>50</DistanceMeters><Calories>0</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>'+track+'</Track><Notes>'+label+' - fixed simulated format fixture; not measured activity</Notes></Lap><Notes>'+label+' - not measured activity</Notes></Activity></Activities></TrainingCenterDatabase>';}
- const card=document.createElement('div');card.className='card';card.innerHTML='<h3>FIT / TCX 格式测试</h3><p class="hint">固定 50 米、30 秒的非地理合成测试夹具，与当前实验无关。仅用于授权格式测试。</p><div class="toolbar"><button id="exportFitFixture">直接导出 FIT</button><button id="exportTcxFixture">直接导出 TCX</button></div><p class="hint">无需生成实验或解压。未通过第三方软件兼容性验收。</p>';$('files').querySelector('.card').after(card);
+ const card=document.createElement('div');card.className='card';card.innerHTML='<h3>FIT / TCX 格式测试</h3><p class="hint">固定 50 米、30 秒的非地理合成测试夹具，与当前实验无关。仅用于授权格式测试。</p><div class="toolbar"><button id="exportFitFixture">固定测试 FIT</button><button id="exportTcxFixture">固定测试 TCX</button></div><p class="hint">无需生成实验或解压。未通过第三方软件兼容性验收。</p>';$('files').querySelector('.card').after(card);
  $('exportFitFixture').onclick=()=>deliver('SYNTHETIC_FORMAT_FIXTURE.fit',fit(),'application/octet-stream');
  $('exportTcxFixture').onclick=()=>deliver('SYNTHETIC_FORMAT_FIXTURE.tcx',tcx(),'application/xml');
+})();
+
+// Export the selected saved experiment, independent of current form edits.
+(()=>{
+ const box=document.createElement('div');box.className='toolbar';
+ box.innerHTML='<button id="downloadFitOne">导出所选 FIT</button><button id="downloadTcxOne">导出所选 TCX</button>';
+ $('downloadCsvOne').parentElement.after(box);
+ const hint=document.createElement('p');hint.className='hint';hint.id='sessionFormatStatus';hint.textContent='导出所选样本的时间、模型里程、速度、心率和步频；含合成标识，无GPS位置。FIT/TCX 步频采用周期/分钟，CSV 采用步/分钟。';box.after(hint);
+ for(const [id,format,mime]of [['downloadFitOne','fit','application/octet-stream'],['downloadTcxOne','tcx','application/xml']])$(id).onclick=()=>{try{
+  const s=sessions[Number($('fileSampleSelect').value)];
+  const timeline=runSnapshot?.scenario_timeline?.find(t=>t.sample_id===s?.id);
+  const payload=StrideFormats[format](s,timeline);
+  deliver(s.id+'_SYNTHETIC.'+format,payload,mime);
+  hint.textContent='已请求导出 '+s.id+' 的合成 '+format.toUpperCase()+' 文件；请在系统文件选择器中完成保存。';
+ }catch(e){hint.textContent='导出失败：'+e.message;}};
 })();

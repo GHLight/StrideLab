@@ -26,6 +26,7 @@ try:
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.add_init_script("""window.__exports=[]; window.StrideAndroid={save:(name,mime,data)=>window.__exports.push({name,mime,data}),locate:()=>setTimeout(()=>window.StrideMapLocation(30,120,12),0)};""")
         page.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(status=200, content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=")))
+        page.route("https://server.arcgisonline.com/**", lambda route: route.fulfill(status=200, content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=")))
         page.goto(f"http://127.0.0.1:{server.server_port}/index.html")
         expect(page.locator("#currentLocationMarker")).to_have_count(1)
         expect(page.locator("#mapAdd")).to_be_enabled()
@@ -49,6 +50,13 @@ try:
         expect(page.locator("#mapAdd")).to_be_enabled()
         page.click("#mapAdd")
         expect(page.locator("#mapCount")).to_have_text("3")
+        page.select_option("#mapProvider","satellite")
+        expect(page.locator("#mapAdd")).to_be_enabled()
+        expect(page.locator("#mapCount")).to_have_text("3")
+        assert "World_Imagery" in page.locator("#tiles img").first.get_attribute("src")
+        page.select_option("#mapProvider","street")
+        expect(page.locator("#mapAdd")).to_be_enabled()
+
         page.locator(".reference-library summary").click()
         page.fill("#referenceName","参考测试场地")
         page.click("#referenceFavorite")
@@ -139,7 +147,27 @@ try:
         csv_export = page.evaluate("window.__exports.at(-1)")
         assert csv_export["name"] == "SIM-2_SYNTHETIC.csv"
         assert all(r["synthetic"] == "true" for r in csv.DictReader(io.StringIO(base64.b64decode(csv_export["data"]).decode())))
-        # FIT and TCX are standalone fixed synthetic fixtures, not exports of the current experiment.
+        # Selected-session export must follow the archived snapshot, not unsaved form edits.
+        page.locator('nav [data-go="sim"]').click()
+        page.fill("#distance","4")
+        page.fill("#scenarioTime","10:00")
+        page.locator('nav [data-go="files"]').click()
+        page.click("#downloadFitOne")
+        page.click("#downloadTcxOne")
+        selected_exports = page.evaluate("window.__exports.slice(-2)")
+        assert selected_exports[0]["name"] == "SIM-2_SYNTHETIC.fit"
+        import fitdecode
+        import xml.etree.ElementTree as ET
+        with fitdecode.FitReader(io.BytesIO(base64.b64decode(selected_exports[0]["data"])), check_crc=fitdecode.CrcCheck.RAISE) as reader:
+            decoded=[f for f in reader if isinstance(f,fitdecode.FitDataMessage)]
+        fitted=[f for f in decoded if f.name=='session'][0]
+        assert fitted.get_value('total_distance') == 2000
+        assert fitted.get_value('start_time').isoformat() == '2031-01-02T15:55:00+00:00'
+        selected_xml=ET.fromstring(base64.b64decode(selected_exports[1]["data"]))
+        ns={"t":"http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+        assert selected_xml.find('.//t:TotalTimeSeconds',ns).text == '720'
+        page.screenshot(path=str(OUT / "files-selected-exports.png"), full_page=True)
+        # Fixed compatibility fixtures remain separate from current-session exports.
         page.click("#exportFitFixture")
         page.click("#exportTcxFixture")
         fixtures = page.evaluate("window.__exports.slice(-2)")

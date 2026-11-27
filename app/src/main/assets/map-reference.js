@@ -11,6 +11,18 @@
   const controls=document.createElement('div');
   controls.innerHTML='<div class="toolbar" style="flex-wrap:nowrap"><input id="mapSearch" type="search" placeholder="搜索学校、道路或地名" aria-label="搜索地名" style="min-width:0;flex:1"><button id="mapSearchGo">搜索</button></div><div id="mapSearchResults" hidden></div>';
   $('mapPanel').prepend(controls);
+  const providers={
+    street:{name:'街道地图',url:(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/'+z+'/'+y+'/'+x,credit:'Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, © OpenStreetMap contributors, GIS User Community'},
+    satellite:{name:'卫星影像',url:(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/'+z+'/'+y+'/'+x,credit:'Source: Esri, Vantor, Earthstar Geographics, GIS User Community'},
+    osm:{name:'OpenStreetMap',url:(z,x,y)=>'https://tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png',credit:'© OpenStreetMap contributors'}
+  };
+  let provider='street';try{const saved=localStorage.getItem('stridelab.reference.provider');if(providers[saved])provider=saved;}catch(e){}
+  const layer=document.createElement('label');layer.className='field';layer.innerHTML='<span>底图</span><select id="mapProvider"><option value="street">街道地图</option><option value="satellite">卫星影像</option><option value="osm">OpenStreetMap</option></select>';controls.append(layer);
+  const attribution=map.querySelector('.attribution');attribution.style.maxWidth='calc(100% - 12px)';attribution.style.fontSize='9px';
+  const credits=document.createElement('details');credits.className='hint';credits.innerHTML='<summary>底图来源与说明</summary><p id="mapCredits"></p><p>联网请求会向所选地图服务发送当前视野瓦片请求；未上传模拟记录。影像拍摄日期、地名和精度取决于服务商，卫星底图不保证包含地名。</p>';controls.append(credits);
+  function showProvider(){const p=providers[provider];$('mapProvider').value=provider;$('mapCredits').textContent=p.credit;attribution.textContent=provider==='osm'?'© OpenStreetMap contributors':'Esri · '+(provider==='satellite'?'Vantor · Earthstar Geographics':'HERE · Garmin · © OSM')+' · 完整来源见底图说明';}
+  showProvider();$('mapProvider').onchange=()=>{provider=$('mapProvider').value;try{localStorage.setItem('stridelab.reference.provider',provider);}catch(e){}tiles.replaceChildren();showProvider();draw();};
+
   const HUD=document.createElement('div');HUD.style.cssText='position:absolute;top:8px;left:8px;background:#fafaf6ed;border:1px solid #dce2da;border-radius:8px;padding:4px 7px;font-size:11px;pointer-events:none;z-index:2';map.append(HUD);
   const zoomControls=document.createElement('div');zoomControls.style.cssText='position:absolute;right:8px;top:8px;display:grid;gap:4px;z-index:3';
   zoomControls.innerHTML='<button id="mapPlus" aria-label="放大地图" style="width:42px;height:42px;font-size:23px;padding:0">+</button><button id="mapMinus" aria-label="缩小地图" style="width:42px;height:42px;font-size:23px;padding:0">−</button>';
@@ -43,7 +55,7 @@
   $('referenceRemove').onclick=()=>{try{const id=$('referenceSaved').value;if(!id)return;if($('referenceRemove').dataset.confirm!==id){$('referenceRemove').dataset.confirm=id;$('referenceLibraryStatus').textContent='再次点击删除收藏以确认；当前草稿不会删除。';return;}delete $('referenceRemove').dataset.confirm;libraryWrite(libraryRead().filter(v=>v.id!==id));libraryRender();}catch(e){$('referenceLibraryStatus').textContent=e.message;}};
   libraryRender();
   function stats(){let d=0;for(let i=1;i<nodes.length;i++)d+=distance(nodes[i-1],nodes[i]);if($('mapClosed').checked&&nodes.length>2)d+=distance(nodes.at(-1),nodes[0]);const selected=$('mapNode').value;$('mapNode').innerHTML='<option value="-1">选择节点</option>'+nodes.map((p,i)=>'<option value="'+i+'">节点 '+(i+1)+'</option>').join('');if(Number(selected)<nodes.length)$('mapNode').value=selected;$('mapUndo').disabled=!undoStack.length;redoButton.disabled=!redoStack.length;$('mapCount').textContent=nodes.length;$('mapLength').textContent=nodes.length>1?d.toFixed(1):'—';}
-  function tileState(){if(!enabled)return;const imgs=[...tiles.children],ok=imgs.filter(i=>i.dataset.state==='ok').length,failed=imgs.filter(i=>i.dataset.state==='error').length;msg.hidden=ok>0;msg.textContent=failed===imgs.length&&imgs.length?'在线底图未能加载。请检查网络后重试；可手动录入已知坐标。':'地图加载中…';retry.hidden=!failed;place.textContent=(chosenPlace?'搜索定位：'+chosenPlace+'。 ':'')+(ok? (failed?'部分地图瓦片未加载。':'地名、道路等由在线底图提供。'):'底图未就绪，暂不允许地图选点。');const w=map.clientWidth/2,h=map.clientHeight/2,central=imgs.some(i=>i.dataset.state==='ok'&&parseFloat(i.style.left)<=w&&parseFloat(i.style.left)+parseFloat(i.style.width)>w&&parseFloat(i.style.top)<=h&&parseFloat(i.style.top)+parseFloat(i.style.height)>h);$('mapAdd').disabled=!central;$('mapMove').disabled=!central;insertButton.disabled=!central;}
+  function tileState(){if(!enabled)return;const imgs=[...tiles.children],ok=imgs.filter(i=>i.dataset.state==='ok').length,failed=imgs.filter(i=>i.dataset.state==='error').length;msg.hidden=ok>0;msg.textContent=failed===imgs.length&&imgs.length?'在线底图未能加载。可切换底图或检查网络后重试；可手动录入已知坐标。':'地图加载中…';retry.hidden=!failed;place.textContent=(chosenPlace?'搜索定位：'+chosenPlace+'。 ':'')+(ok? (failed?'部分地图瓦片未加载。':'地名、道路等由在线底图提供。'):'底图未就绪，暂不允许地图选点。');const w=map.clientWidth/2,h=map.clientHeight/2,central=imgs.some(i=>i.dataset.state==='ok'&&parseFloat(i.style.left)<=w&&parseFloat(i.style.left)+parseFloat(i.style.width)>w&&parseFloat(i.style.top)<=h&&parseFloat(i.style.top)+parseFloat(i.style.height)>h);$('mapAdd').disabled=!central;$('mapMove').disabled=!central;insertButton.disabled=!central;}
   let frame=0;
   function schedule(){if(!frame)frame=requestAnimationFrame(()=>{frame=0;draw();});}
   function draw(){if(!enabled||!viewReady)return;let w=map.clientWidth,h=map.clientHeight;if(!w||!h)return;const c=project(center),left=c[0]-w/2,top=c[1]-h/2;
@@ -56,7 +68,7 @@
       if(y<0||y>=n)continue;let key=tz+':'+x+':'+y,im=existing.get(key);needed.add(key);
       if(!im){im=document.createElement('img');im.dataset.key=key;im.dataset.state='loading';im.alt='';im.draggable=false;
         im.onload=()=>{im.dataset.state='ok';tileState();};im.onerror=()=>{im.dataset.state='error';tileState();};
-        im.src='https://tile.openstreetmap.org/'+tz+'/'+((x%n+n)%n)+'/'+y+'.png';tiles.append(im);}
+        im.src=providers[provider].url(tz,((x%n+n)%n),y);tiles.append(im);}
       Object.assign(im.style,{left:(x*size-left)+'px',top:(y*size-top)+'px',width:size+'px',height:size+'px'});
     }
     for(let el of [...tiles.children])if(!needed.has(el.dataset.key))el.remove();

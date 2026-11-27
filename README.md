@@ -1,3 +1,5 @@
+> 当前整合与验收状态见 [项目比对](docs/APP_COMPARISON.md)，操作说明见 [使用说明](docs/USER_GUIDE.md)。下文保留原始导入说明；不作为最新交付状态。
+
 # StrideLab · 运动数据模拟实验室
 
 当前工程归档：Android V0.1 + synthetic-running-data Skill V2.0。
