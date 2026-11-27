@@ -160,18 +160,30 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
  $('generate').closest('.toolbar').before(summary);
  const quality=document.createElement('div');quality.className='card';quality.innerHTML='<h3>研究数据质量</h3><p id="qualitySummary" class="hint"></p><div class="grid"><div class="stat"><small>积分距离偏差</small><strong id="qualityIntegral">—</strong></div><div class="stat"><small>观测误差 RMS</small><strong id="qualityNoise">—</strong></div></div><p class="hint" id="qualityDetails"></p><p class="hint">模型估计，未使用人体实测校准。</p>';
  $('trace').closest('.card').after(quality);
+ const statistics=document.createElement('div');statistics.className='card';statistics.innerHTML='<h3>运动与观测统计 · 合成</h3><p id="statResearchOverview" class="hint"></p><div class="grid"><div class="stat"><small>稳定阶段速度CV</small><strong id="statSpeedCV">—</strong></div><div class="stat"><small>观测误差P95</small><strong id="statErrorP95">—</strong></div></div><svg id="statStepChart" viewBox="0 0 320 95"></svg><svg id="statContactChart" viewBox="0 0 320 95"></svg><svg id="statOscillationChart" viewBox="0 0 320 95"></svg><svg id="statErrorChart" viewBox="0 0 320 95"></svg><button id="statDownload" class="wide">导出合成研究统计 JSON</button><p id="statDownloadStatus" class="hint"></p>';quality.after(statistics);
+ const fmt=(v,d=2)=>Number.isFinite(v)?v.toFixed(d):'—';
+ const renderStats=s=>{
+  const st=C.sampleStatistics(s),d=C.describe(sessions.map(x=>x.summary.model_distance_m));
+  $('statSpeedCV').textContent=fmt(st.steady_speed_cv_pct)+'%';$('statErrorP95').textContent=fmt(st.observation_error_m.p95)+' m';
+  $('statResearchOverview').textContent=sessions.length+' 条样本 · 里程均值 '+fmt(d.mean,1)+' m · 标准差 '+fmt(d.sd,1)+' m';
+  const charts=[['statStepChart','step_length_m','步幅','m'],['statContactChart','ground_contact_ms','触地时间','ms'],['statOscillationChart','vertical_oscillation_mm','垂直振幅','mm']];
+  for(const [id,key,label,unit]of charts){const vals=s.rows.filter(x=>x.t>0&&typeof x[key]==='number'&&Number.isFinite(x[key])).map(x=>x[key]);if(vals.length)lineChart($(id),vals,label,unit);else $(id).replaceChildren();}
+  const errors=s.rows.map(x=>Math.hypot(x.observed_x_m-x.ideal_x_m,x.observed_y_m-x.ideal_y_m)).sort((a,b)=>a-b);
+  if(errors.length)lineChart($('statErrorChart'),errors,'误差分位分布','m');
+ };
+ $('statDownload').onclick=()=>{try{if(!sessions.length)throw Error('暂无研究结果');deliver('StrideLab_SYNTHETIC_statistics.json',JSON.stringify({synthetic:true,declaration:C.DECLARATION,engine:runSnapshot.engine,batch_distance_m:C.describe(sessions.map(s=>s.summary.model_distance_m)),samples:sessions.map(C.sampleStatistics)},null,2),'application/json');$('statDownloadStatus').textContent='已请求保存统计报告';}catch(e){$('statDownloadStatus').textContent=e.message;}};
  const check=()=>{let c=config();let n=NaN;try{n=Math.round(C.distanceBounds(c)[1]*c.pace*60)+1;}catch(e){}const validCount=Number.isFinite(n*c.count);$('preflightSummary').textContent=validCount?c.count+' 个样本 · 预计 '+(n*c.count).toLocaleString('zh-CN')+' 个采样点 · 1秒采样':'请先填写完整参数';
  try{C.validate(c);if(c.positionMode==='geo')C.validateReference(routeReference);scenarioTimeline(c);const g=C.geometry(points,closed);if(C.crossing(points,closed))throw Error('局部路线存在自相交');if(!closed&&C.distanceBounds(c)[1]*1000>g.len+.01)throw Error('开放局部路线长度不足');$('preflightError').textContent='';}catch(e){$('preflightError').textContent=e.message;}};
  const diagnostics=()=>{const s=sessions[Number($('sampleSelect').value)];if(!s||!runSnapshot)return;const r=s.rows,q=s.summary,target=q.target_distance_m??runSnapshot.config.distance*1000;const sum=r.reduce((a,x,i)=>a+(i?x.speed_mps*(x.t-r[i-1].t):0),0);const integral=Math.abs(sum-target)/target*100;const finite=r.every(x=>['t','distance_m','speed_mps','ideal_x_m','ideal_y_m','observed_x_m','observed_y_m'].every(k=>Number.isFinite(x[k])));const monotone=r.every((x,i)=>!i||(x.t>r[i-1].t&&x.distance_m>=r[i-1].distance_m));$('qualityIntegral').textContent=integral.toFixed(4)+'%';$('qualityNoise').textContent=q.rms_error_m.toFixed(2)+' m';$('qualitySummary').textContent=finite&&monotone&&integral<=.5?'基础一致性检查通过':'存在需要检查的数值异常';$('qualityDetails').textContent=r.length+' 个局部采样点 · '+(finite?'数值有限':'非有限数值')+' · '+(monotone?'时间与距离单调':'时间或距离异常')+' · 引擎 '+runSnapshot.engine;};
  const oldRefresh=refreshConfig;refreshConfig=function(){oldRefresh();check();};
- const oldRender=renderSample;renderSample=function(){oldRender();diagnostics();};
+ const oldRender=renderSample;renderSample=function(){oldRender();diagnostics();const s=sessions[Number($('sampleSelect').value)];if(s)renderStats(s);};
  $('sampleSelect').onchange=renderSample;
  fields.forEach(k=>$(k).addEventListener('input',check));
  sim.addEventListener('change',check);
  const navCheck=()=>{if(currentPage==='sim')check();};document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',navCheck));
  const storageInfo=document.createElement('p');storageInfo.id='storageInfo';storageInfo.className='hint';$('projectMessage').after(storageInfo);
  const updateStorage=()=>{try{const raw=localStorage.getItem(PROJECT_KEY)||'[]';const count=projectList().length;storageInfo.textContent='历史存档 '+count+'/50 · JSON 数据约 '+Math.ceil(new TextEncoder().encode(raw).length/1024)+' KiB（不含系统开销）';}catch(e){storageInfo.textContent='存储统计不可用';}};
- const oldProjects=renderProjects;renderProjects=function(){oldProjects();updateStorage();};updateStorage();
+ const oldProjects=renderProjects;renderProjects=function(){oldProjects();updateStorage();};updateStorage();if(sessions.length)renderSample();
  const importField=document.createElement('label');importField.className='field';importField.innerHTML='<span>从本机选择研究备份（浏览器支持时）</span><input id="projectImportFile" type="file" accept=".json,application/json">';
  $('projectImportText').before(importField);
  $('projectImportFile').onchange=async()=>{const f=$('projectImportFile').files?.[0];if(!f)return;try{if(f.size>1000000)throw Error('备份超过1 MB');$('projectImportText').value=await f.text();$('projectMessage').textContent='已读取备份，请点击验证并导入。';}catch(e){$('projectMessage').textContent='读取失败：'+e.message;}finally{$('projectImportFile').value='';}};
