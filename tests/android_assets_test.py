@@ -241,9 +241,11 @@ try:
         page.click("#projectImport")
         expect(page.locator("#projectMessage")).to_contain_text("导入 0 个")
         expect(page.locator("#projectHistory option")).to_have_count(2)
+        page.select_option("#fileSampleSelect","1")
         page.click("#exportLocalPreview")
         local=page.evaluate("window.__exports.at(-1)")
-        assert local["name"].endswith("_SYNTHETIC_LOCAL_TRACE.svg")
+        assert local["name"]=="SIM-2_SYNTHETIC_LOCAL_TRACE.svg"
+        assert page.locator("#sampleSelect").input_value()=="1"
         svg=ET.fromstring(base64.b64decode(local["data"]))
         assert "NO GPS" in "".join(svg.itertext())
         assert len(svg.findall("{http://www.w3.org/2000/svg}path"))==2
@@ -263,6 +265,9 @@ try:
         expect(page.locator("#mapShapeStatus")).to_contain_text("80 个插值节点")
         page.select_option("#mapInterpolation","linear")
         expect(page.locator("#mapShapeStatus")).to_contain_text("80 个插值节点")
+        page.reload()
+        expect(page.locator("#mapInterpolationCount")).to_have_value("80")
+        expect(page.locator("#mapInterpolation")).to_have_value("linear")
         preview=page.locator("#mapShapePreview path").get_attribute("d")
         page.click("#mapUseShape")
         expect(page.locator("#sim")).to_be_visible()
@@ -277,6 +282,7 @@ try:
         expect(page.locator("#npts")).to_have_text("26")
         page.click("#redo")
         expect(page.locator("#npts")).to_have_text("80")
+        expect(page.locator("#positionMode")).to_have_value("geo")
         # Map-derived route: the actual exported archive contains geographic FIT records
         # and retains the explicitly synthetic label. The mode can still be switched off.
         expect(page.locator("#mapFittedOverlay")).to_have_count(1)
