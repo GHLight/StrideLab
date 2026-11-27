@@ -21,8 +21,13 @@ jobs:
       - name: Install required Android SDK packages using runner SDK
         shell: bash
         run: |
-          command -v sdkmanager
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_HOME="$sdk"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$manager" || { echo "SDK manager missing at $manager"; ls -la "$sdk/cmdline-tools"; exit 1; }
+          "$manager" --sdk_root="$sdk" 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+          echo "$sdk/platform-tools" >> "$GITHUB_PATH"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
