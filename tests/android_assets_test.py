@@ -363,6 +363,40 @@ try:
         expect(denied.locator("#mapCount")).to_have_text("1")
         assert not errors,errors
         denied.close()
+        # Independent local sensitivity study using actual app controls and export.
+        local_page=browser.new_page(viewport={"width":390,"height":844},is_mobile=True,has_touch=True)
+        local_page.on("pageerror",lambda e: errors.append(str(e)))
+        local_page.add_init_script("""window.__exports=[]; window.StrideAndroid={save:(name,mime,data)=>window.__exports.push({name,mime,data}),locate:()=>setTimeout(()=>window.StrideMapLocationError(),0)};""")
+        local_page.goto(f"http://127.0.0.1:{server.server_port}/index.html")
+        local_page.locator('nav [data-go="sim"]').click()
+        local_page.select_option("#positionMode","none")
+        local_page.fill("#count","5")
+        local_page.fill("#distance","2")
+        local_page.fill("#distanceSpreadM","100")
+        local_page.fill("#seed","17")
+        expect(local_page.locator("#preflightError")).to_have_text("")
+        local_page.click("#generate")
+        expect(local_page.locator("#results")).to_be_visible(timeout=30000)
+        expect(local_page.locator("#summaryBody tr")).to_have_count(5)
+        expect(local_page.locator("#qualityIntegral")).to_have_text("0.0000%")
+        local_page.locator('nav [data-go="files"]').click()
+        local_page.click("#download")
+        sweep_export=local_page.evaluate("window.__exports.at(-1)")
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(sweep_export["data"]))) as z:
+            manifest=json.loads(z.read("manifest.json"))
+            targets=[s["target_distance_m"] for s in manifest["summary"]]
+            assert len(set(targets))==5 and all(1900<=d<=2100 for d in targets)
+            for i,s in enumerate(manifest["summary"]):
+                assert abs(s["model_distance_m"]-targets[i])<1e-6
+                assert s["seconds"]==round(targets[i]*6*60/1000)
+        local_page.reload()
+        local_page.locator('nav [data-go="sim"]').click()
+        expect(local_page.locator("#distanceSpreadM")).to_have_value("100")
+        local_page.locator('nav [data-go="files"]').click()
+        local_page.click("#download")
+        assert local_page.evaluate("window.__exports.at(-1).data")==sweep_export["data"]
+        local_page.close()
+        assert not errors, errors
         browser.close()
 finally:
     server.shutdown()
