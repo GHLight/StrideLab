@@ -50,3 +50,14 @@ assert.throws(()=>C.validate({...sweep,distanceSpreadM:2000}));
 assert.throws(()=>C.validate({...sweep,positionMode:'geo'}));
 assert.deepEqual(C.simulateResearch({...c,positionMode:'none',distanceSpreadM:0},p,true,0),C.simulate(c,p,true,0));
 console.log('PASS: local distance sweeps, exact integration, no-GPS separation, reproducible targets and legacy behavior');
+
+const stats=C.sampleStatistics(z);
+assert.equal(stats.synthetic,true);
+assert.equal(stats.observation_error_m.p95,0);
+assert.ok(stats.steady_speed_cv_pct>=0);
+assert.equal(stats.step_length_m.n,z.rows.length-1);
+assert.ok(stats.ground_contact_ms.mean>=150&&stats.ground_contact_ms.mean<=350);
+assert.equal(C.describe([1,2,3,null,NaN]).mean,2);
+assert.ok(Math.abs(C.describe([1,2,3]).p95-2.9)<1e-9);
+assert.equal(C.describe([]).mean,null);
+console.log('PASS: research statistics, quantiles, missing observations and zero-noise error distribution');
