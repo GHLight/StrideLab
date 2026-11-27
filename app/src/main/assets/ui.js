@@ -146,3 +146,34 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
   $('batchExportInfo').textContent='已请求导出 '+entries.length+' 个合成 FIT 文件，请在系统文件选择器中完成保存。';
  }catch(e){$('batchExportInfo').textContent='导出失败：'+e.message;}};
 })();
+
+/* Guided local research workflow and diagnostics. */
+(()=>{
+ const sim=$('sim'),analysis=$('analysis'),files=$('files');
+ const intro=document.createElement('div');intro.className='card workflow-guide';
+ intro.innerHTML='<h3>开始一个研究实验</h3><p class="hint">1. 场地参考与局部研究画布　2. 实验参数　3. 结果分析　4. 导出或备份</p><p class="hint">地图参考仅用于场地查看；合成样本使用独立的局部坐标。</p><button class="wide" id="dismissGuide">知道了</button>';
+ $('route').querySelector('.card').before(intro);try{intro.hidden=localStorage.getItem('stridelab.guide.seen')==='1';}catch(e){}
+ $('dismissGuide').onclick=()=>{intro.hidden=true;try{localStorage.setItem('stridelab.guide.seen','1');}catch(e){}};
+ const summary=document.createElement('div');summary.className='card';summary.innerHTML='<h3>生成前检查</h3><p id="preflightSummary" class="hint" aria-live="polite"></p><p id="preflightError" class="error" aria-live="polite"></p><p class="hint">仅检查局部实验几何、输入范围与计算规模，不代表实测运动质量。</p>';
+ $('generate').closest('.toolbar').before(summary);
+ const quality=document.createElement('div');quality.className='card';quality.innerHTML='<h3>研究数据质量</h3><p id="qualitySummary" class="hint"></p><div class="grid"><div class="stat"><small>积分距离偏差</small><strong id="qualityIntegral">—</strong></div><div class="stat"><small>观测误差 RMS</small><strong id="qualityNoise">—</strong></div></div><p class="hint" id="qualityDetails"></p><p class="hint">模型估计，未使用人体实测校准。</p>';
+ $('trace').closest('.card').after(quality);
+ const check=()=>{let c=config();const n=Math.round(c.distance*c.pace*60)+1;const validCount=Number.isFinite(n*c.count);$('preflightSummary').textContent=validCount?c.count+' 个样本 · 预计 '+(n*c.count).toLocaleString('zh-CN')+' 个采样点 · 1秒采样':'请先填写完整参数';
+ try{C.validate(c);scenarioTimeline(c);const g=C.geometry(points,closed);if(C.crossing(points,closed))throw Error('局部路线存在自相交');if(!closed&&c.distance*1000>g.len+.01)throw Error('开放局部路线长度不足');$('preflightError').textContent='';}catch(e){$('preflightError').textContent=e.message;}};
+ const diagnostics=()=>{const s=sessions[Number($('sampleSelect').value)];if(!s||!runSnapshot)return;const r=s.rows,q=s.summary,target=runSnapshot.config.distance*1000;const sum=r.reduce((a,x,i)=>a+(i?x.speed_mps*(x.t-r[i-1].t):0),0);const integral=Math.abs(sum-target)/target*100;const finite=r.every(x=>['t','distance_m','speed_mps','ideal_x_m','ideal_y_m','observed_x_m','observed_y_m'].every(k=>Number.isFinite(x[k])));const monotone=r.every((x,i)=>!i||(x.t>r[i-1].t&&x.distance_m>=r[i-1].distance_m));$('qualityIntegral').textContent=integral.toFixed(4)+'%';$('qualityNoise').textContent=q.rms_error_m.toFixed(2)+' m';$('qualitySummary').textContent=finite&&monotone&&integral<=.5?'基础一致性检查通过':'存在需要检查的数值异常';$('qualityDetails').textContent=r.length+' 个局部采样点 · '+(finite?'数值有限':'非有限数值')+' · '+(monotone?'时间与距离单调':'时间或距离异常')+' · 引擎 '+runSnapshot.engine;};
+ const oldRefresh=refreshConfig;refreshConfig=function(){oldRefresh();check();};
+ const oldRender=renderSample;renderSample=function(){oldRender();diagnostics();};
+ $('sampleSelect').onchange=renderSample;
+ fields.forEach(k=>$(k).addEventListener('input',check));
+ sim.addEventListener('change',check);
+ const navCheck=()=>{if(currentPage==='sim')check();};document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',navCheck));
+ const storageInfo=document.createElement('p');storageInfo.id='storageInfo';storageInfo.className='hint';$('projectMessage').after(storageInfo);
+ const updateStorage=()=>{try{const raw=localStorage.getItem(PROJECT_KEY)||'[]';const count=projectList().length;storageInfo.textContent='历史存档 '+count+'/50 · JSON 数据约 '+Math.ceil(new TextEncoder().encode(raw).length/1024)+' KiB（不含系统开销）';}catch(e){storageInfo.textContent='存储统计不可用';}};
+ const oldProjects=renderProjects;renderProjects=function(){oldProjects();updateStorage();};updateStorage();
+ const importField=document.createElement('label');importField.className='field';importField.innerHTML='<span>从本机选择研究备份（浏览器支持时）</span><input id="projectImportFile" type="file" accept=".json,application/json">';
+ $('projectImportText').before(importField);
+ $('projectImportFile').onchange=async()=>{const f=$('projectImportFile').files?.[0];if(!f)return;try{if(f.size>1000000)throw Error('备份超过1 MB');$('projectImportText').value=await f.text();$('projectMessage').textContent='已读取备份，请点击验证并导入。';}catch(e){$('projectMessage').textContent='读取失败：'+e.message;}finally{$('projectImportFile').value='';}};
+ if(window.StrideAndroid)importField.hidden=true;
+ const fileOverview=$('fileStatus').closest('.card'),source=document.createElement('p');source.className='notice';source.textContent='当前研究样本为局部合成数据，不包含地理 GPS。独立 GPS 格式夹具位于高级工具。';fileOverview.append(source);
+ check();diagnostics();
+})();
