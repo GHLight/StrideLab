@@ -54,7 +54,7 @@
   $('mapSave').closest('.toolbar').after(library);
   const shapeCard=document.createElement('div');shapeCard.className='card';shapeCard.style.boxShadow='none';
   shapeCard.innerHTML='<h3>② 自动环形路线预览</h3><p class="hint">地图上的虚线只是参考标点连线。下图才是从形状拟合出的独立局部研究路线。</p><div id="mapShapePreviewBox" class="canvas" hidden><svg id="mapShapePreview" viewBox="-125 -110 250 220" aria-label="标准化环形研究预览"></svg></div><p id="mapShapeStatus" class="hint" aria-live="polite">请先添加至少三个分散的参考点。</p><button id="mapUseShape" class="primary wide" disabled>使用预览路线并配置模拟 →</button><p class="hint">此操作替换当前局部路线，可撤销；不改变历史实验。模型归一至400米，不含地理 GPS。</p>';
-  $('mapStatus').after(shapeCard);
+  $('mapAdd').closest('.toolbar').after(shapeCard);
   let shapeKey=null,shapeResult=null;
   function refreshShape(){
     const key=JSON.stringify(snapshotRef());if(key===shapeKey)return;shapeKey=key;shapeResult=null;
