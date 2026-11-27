@@ -19,19 +19,44 @@ function encodeFit(session,timeline,positions=null){
  function define(l,g,fs){defs.set(l,fs);data.push(64|l,0,0);put(data,g,2);data.push(fs.length);for(const[n,t,size]of fs)data.push(n,size,t);}
  function msg(l,vs){data.push(l);defs.get(l).forEach(([n,t,size],i)=>{const v=vs[i];if(t===7){for(let j=0;j<size;j++)data.push(j<Math.min(v.length,size-1)?v.charCodeAt(j):0);}else put(data,v,size);});}
  const t0=s.start-EPOCH,t1=s.end-EPOCH,elapsed=s.seconds*1000,dist=Math.round(s.distance*100),speed=Math.round(s.distance/s.seconds*1000);
- const active=s.rows.slice(1),avg=k=>active.reduce((a,r)=>a+r[k],0)/active.length,max=k=>active.reduce((a,r)=>Math.max(a,r[k]),0),hr=Math.round(avg('hr_bpm')),cad=Math.round(avg('cadence_spm')/2),cycles=Math.round(active.reduce((a,r,i)=>a+r.cadence_spm*(r.t-s.rows[i].t)/120,0));
- define(0,0,[f(0,E),f(1,H),f(2,H),f(3,140),f(4,U),f(8,7,32)]);msg(0,[4,255,0,session.seed||1,t0,LABEL]);
- define(1,21,[f(253,U),f(0,E),f(1,E)]);msg(1,[t0,0,0]);
+ // Running dynamics use the FIT profile's native units. Missing observations
+ // remain invalid rather than being inferred from unrelated legacy samples.
+ const invalid16=65535;
+ const u16=(v,scale)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&Math.round(v*scale)<invalid16?Math.round(v*scale):invalid16;
  const semicircle=n=>Math.max(-2147483648,Math.min(2147483646,Math.round(n*2147483648/180)));
- define(2,20,[f(253,U),f(5,U),f(6,H),f(3,B),f(4,B),...(positions?[f(0,133),f(1,133)]:[])]);
- for(const [i,r] of s.rows.entries())msg(2,[t0+r.t,Math.round(r.distance_m*100),Math.round(r.speed_mps*1000),Math.round(r.hr_bpm),Math.round(r.cadence_spm/2),...(positions?positions[i].map(semicircle):[])]);
- msg(1,[t1,0,4]);
- const common=[elapsed,elapsed,dist,cycles,speed,Math.round(max('speed_mps')*1000),hr,Math.round(max('hr_bpm')),cad,Math.round(max('cadence_spm')/2)];
- define(3,19,[f(254,H),f(253,U),f(0,E),f(1,E),f(2,U),f(7,U),f(8,U),f(9,U),f(10,U),f(13,H),f(14,H),f(15,B),f(16,B),f(17,B),f(18,B),f(25,E)]);msg(3,[0,t1,9,1,t0,...common,1]);
- define(4,18,[f(254,H),f(253,U),f(0,E),f(1,E),f(2,U),f(5,E),f(6,E),f(7,U),f(8,U),f(9,U),f(10,U),f(14,H),f(15,H),f(16,B),f(17,B),f(18,B),f(19,B),f(25,H),f(26,H),f(110,7,32)]);msg(4,[0,t1,8,1,t0,1,0,...common,0,1,LABEL]);
+ const pos=i=>positions?positions[i].map(semicircle):[];
+ const dynamics=r=>[u16(r.vertical_oscillation_mm,10),u16(r.ground_contact_ms!==null&&r.cadence_spm>0?r.ground_contact_ms*r.cadence_spm/600:undefined,100),u16(r.ground_contact_ms,10),u16(r.speed_mps>0?r.step_length_m:undefined,10000)];
+ // Summaries are calculated from the current rows, never from a reference file.
+ function stats(lo,hi){
+  const active=s.rows.slice(lo+1,hi+1),elapsed=s.rows[hi].t-s.rows[lo].t,dist=Math.round(s.rows[hi].distance_m*100)-Math.round(s.rows[lo].distance_m*100);
+  const avg=k=>active.reduce((a,r)=>a+r[k],0)/active.length,max=k=>active.reduce((a,r)=>Math.max(a,r[k]),0);
+  const cycles=active.reduce((a,r,i)=>a+r.cadence_spm*(r.t-s.rows[lo+i].t)/120,0);
+  const dyn=active.map(dynamics);
+  const avgDyn=i=>{const v=dyn.map(d=>d[i]).filter(x=>x!==invalid16);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length):invalid16;};
+  return {elapsed:elapsed*1000,dist,cycles:Math.round(cycles),common:[elapsed*1000,elapsed*1000,dist,Math.round(cycles),Math.round((s.rows[hi].distance_m-s.rows[lo].distance_m)/elapsed*1000),Math.round(max('speed_mps')*1000),Math.round(avg('hr_bpm')),Math.round(max('hr_bpm')),Math.round(avg('cadence_spm')/2),Math.round(max('cadence_spm')/2)],dyn:[avgDyn(0),avgDyn(1),avgDyn(2)],step:avgDyn(3)};
+ }
+ define(0,0,[f(0,E),f(1,H),f(2,H),f(3,140),f(4,U),f(8,7,48)]);msg(0,[4,255,0,session.seed||1,t0,LABEL+' - NOT MEASURED']);
+ define(1,21,[f(253,U),f(0,E),f(1,E),f(4,B)]);msg(1,[t0,0,0,0]);
+ define(2,20,[f(253,U),...(positions?[f(0,133),f(1,133)]:[]),f(5,U),f(6,H),f(3,B),f(4,B),f(39,H),f(40,H),f(41,H),f(85,H)]);
+ for(const [i,r] of s.rows.entries())msg(2,[t0+r.t,...pos(i),Math.round(r.distance_m*100),Math.round(r.speed_mps*1000),Math.round(r.hr_bpm),Math.round(r.cadence_spm/2),...dynamics(r)]);
+ msg(1,[t1,0,4,0]);
+ // Split on modeled route length when available; final partial lap is kept.
+ // Sample boundaries are used without inventing intermediate observations.
+ const bounds=[0],last=s.rows.length-1,len=session.summary.route_length_m;
+ if(Number.isFinite(len)&&len>=5&&s.distance/len<=1000){
+   let boundary=len;
+   for(let i=1;i<last;i++)if(s.rows[i].distance_m+1e-8>=boundary){bounds.push(i);while(boundary<=s.rows[i].distance_m+1e-8)boundary+=len;}
+ }
+ bounds.push(last);
+ const lapFields=[f(253,U),f(0,E),f(1,E),f(2,U),...(positions?[f(3,133),f(4,133),f(5,133),f(6,133)]:[]),f(7,U),f(8,U),f(9,U),f(10,U),f(13,H),f(14,H),f(15,B),f(16,B),f(17,B),f(18,B),f(23,E),f(24,E),f(25,E),f(77,H),f(78,H),f(79,H),f(254,H)];
+ define(3,19,lapFields);
+ for(let i=0;i<bounds.length-1;i++){const lo=bounds[i],hi=bounds[i+1],v=stats(lo,hi);msg(3,[t0+s.rows[hi].t,9,1,t0+s.rows[lo].t,...pos(lo),...pos(hi),...v.common,0,i===bounds.length-2?7:2,1,...v.dyn,i]);}
+ const total=stats(0,last);
+ define(4,18,[f(253,U),f(0,E),f(1,E),f(2,U),...(positions?[f(3,133),f(4,133)]:[]),f(5,E),f(6,E),f(7,U),f(8,U),f(9,U),f(10,U),f(14,H),f(15,H),f(16,B),f(17,B),f(18,B),f(19,B),f(25,H),f(26,H),f(89,H),f(90,H),f(91,H),f(110,7,48),f(134,H),f(254,H)]);
+ msg(4,[t1,8,1,t0,...pos(0),1,0,...total.common,0,bounds.length-1,...total.dyn,LABEL,total.step,0]);
  define(5,34,[f(253,U),f(0,U),f(1,H),f(2,E),f(3,E),f(4,E)]);msg(5,[t1,elapsed,1,0,26,1]);
  // All definitions in this encoder use FIT 1.x base fields; no developer fields.
- const head=[14,16];put(head,2100,2);put(head,data.length,4);head.push(46,70,73,84);put(head,crc(head),2);
+ const head=[14,16];put(head,2184,2);put(head,data.length,4);head.push(46,70,73,84);put(head,crc(head),2);
  const out=new Uint8Array(head.length+data.length+2);out.set(head);out.set(data,head.length);new DataView(out.buffer).setUint16(out.length-2,crc(out.subarray(0,-2)),true);return out;
 }
 function encodeTcx(session,timeline,positions=null){
