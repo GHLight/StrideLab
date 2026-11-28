@@ -146,8 +146,63 @@ function sampleStatistics(session){
  const result={synthetic:true,sample_id:session.id,steady_speed_cv_pct:speed.mean>0?100*speed.sd/speed.mean:null,step_length_m:describe(active.map(r=>r.step_length_m)),ground_contact_ms:describe(active.map(r=>r.ground_contact_ms)),vertical_oscillation_mm:describe(active.map(r=>r.vertical_oscillation_mm)),observation_error_m:describe(errors),heart_rate_bpm:describe(active.map(r=>r.hr_bpm)),cadence_spm:describe(active.map(r=>r.cadence_spm))};
  return result;
 }
+// Research integrity helpers; no modification of the generated observations.
+function sha256(data){
+ const bytes=typeof data==='string'?new TextEncoder().encode(data):data;
+ if(!(bytes instanceof Uint8Array))throw Error('校验对象必须是文本或字节数组');
+ const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+ const H=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+ const padded=new Uint8Array(Math.ceil((bytes.length+9)/64)*64);padded.set(bytes);padded[bytes.length]=128;
+ const view=new DataView(padded.buffer),bits=bytes.length*8;view.setUint32(padded.length-8,Math.floor(bits/4294967296));view.setUint32(padded.length-4,bits>>>0);
+ const W=new Uint32Array(64),rot=(v,n)=>(v>>>n)|(v<<(32-n));
+ for(let off=0;off<padded.length;off+=64){
+  for(let i=0;i<16;i++)W[i]=view.getUint32(off+4*i);
+  for(let i=16;i<64;i++){const a=W[i-15],b=W[i-2];W[i]=(W[i-16]+(rot(a,7)^rot(a,18)^(a>>>3))+W[i-7]+(rot(b,17)^rot(b,19)^(b>>>10)))>>>0;}
+  let [a,b,c,d,e,f,g,h]=H;
+  for(let i=0;i<64;i++){const t1=(h+(rot(e,6)^rot(e,11)^rot(e,25))+((e&f)^(~e&g))+K[i]+W[i])>>>0,t2=((rot(a,2)^rot(a,13)^rot(a,22))+((a&b)^(a&c)^(b&c)))>>>0;h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+  const state=[a,b,c,d,e,f,g,h];for(let i=0;i<8;i++)H[i]=(H[i]+state[i])>>>0;
+ }
+ return Array.from(H,n=>n.toString(16).padStart(8,'0')).join('');
+}
+function researchArchive(files,metadata){
+ const out={...files},hashes={};
+ for(const name of Object.keys(out).sort()){if(name==='manifest.json'||name==='checksums.sha256')throw Error('保留文件名');hashes[name]=sha256(out[name]);}
+ out['manifest.json']=JSON.stringify({...metadata,synthetic:true,integrity_algorithm:'SHA-256',file_hashes:hashes},null,2);
+ out['checksums.sha256']=Object.keys(out).sort().map(name=>sha256(out[name])+'  '+name).join('\n')+'\n';
+ return zip(out);
+}
+function validateResearchRows(s){
+ if(!s||!Array.isArray(s.rows)||s.rows.length<2||s.rows[0].t!==0)throw Error('样本时间轴不完整');
+ const rows=s.rows,issues=[],add=x=>{if(!issues.includes(x))issues.push(x);};
+ let integrated=0,maxStepResidual=0;
+ for(let i=0;i<rows.length;i++){
+  const r=rows[i];if(r.synthetic!==true)add('来源标记缺失');
+  if(!['t','distance_m','speed_mps','hr_bpm','cadence_spm','step_length_m'].every(k=>Number.isFinite(r[k])))add('非有限数值');
+  if(r.speed_mps<0||r.cadence_spm<0||r.step_length_m<0)add('负运动量');
+  if(i){const dt=r.t-rows[i-1].t;if(!(dt>0)||r.distance_m<rows[i-1].distance_m)add('时间或距离不单调');integrated+=r.speed_mps*dt;}
+  maxStepResidual=Math.max(maxStepResidual,Math.abs(r.speed_mps-r.cadence_spm*r.step_length_m/60));
+ }
+ const total=rows.at(-1).distance_m,residual=Math.abs(integrated-total);
+ if(!Number.isFinite(residual)||residual>Math.max(.01,total*.005))add('距离积分不一致');
+ if(!Number.isFinite(maxStepResidual)||maxStepResidual>1e-6)add('步幅关系不一致');
+ if(!Number.isFinite(s.summary?.model_distance_m)||Math.abs(total-s.summary.model_distance_m)>.01||s.summary.seconds!==rows.at(-1).t)add('摘要与逐点数据不一致');
+ return {synthetic:true,passed:issues.length===0,issues,row_count:rows.length,integrated_distance_m:integrated,distance_residual_m:residual,max_step_relation_residual_mps:maxStepResidual};
+}
+function analysisRows(session,interval=1){
+ if(![1,2,5,10,15,30].includes(interval))throw Error('分析采样间隔无效');
+ if(!session||session.position_source||!session.rows?.length||session.rows.some(r=>'latitude_deg' in r||'longitude_deg' in r))throw Error('仅限无GPS局部研究分析');
+ return session.rows.filter((r,i)=>i===0||i===session.rows.length-1||r.t%interval===0).map(r=>({...r,analysis_view:true}));
+}
+function compareResearchGroups(groups){
+ if(!Array.isArray(groups)||groups.length<2||groups.length>5)throw Error('请选择2–5个独立实验组');
+ return groups.map(g=>{
+  if(!g||!Array.isArray(g.sessions)||!g.sessions.length||g.sessions.some(s=>s.position_source||s.rows.some(r=>'latitude_deg' in r)))throw Error('仅支持无GPS局部实验组');
+  const stats=g.sessions.map(sampleStatistics);
+  return {id:String(g.id),label:String(g.label),synthetic:true,n:g.sessions.length,distance_m:describe(g.sessions.map(s=>s.summary.model_distance_m)),pace_sec_km:describe(g.sessions.map(s=>s.summary.pace_sec_km)),mean_hr_bpm:describe(g.sessions.map(s=>s.summary.mean_hr)),steady_speed_cv_pct:describe(stats.map(x=>x.steady_speed_cv_pct)),rms_error_m:describe(g.sessions.map(s=>s.summary.rms_error_m)),valid_count:g.sessions.filter(s=>validateResearchRows(s).passed).length};
+ });
+}
 function csv(rows){if(!rows.length)return '';let keys=Object.keys(rows[0]);return keys.join(',')+'\n'+rows.map(r=>keys.map(k=>typeof r[k]==='number'?String(Math.round(r[k]*1e6)/1e6):r[k]??'').join(',')).join('\n')+'\n';}
 const table=Array.from({length:256},(_,i)=>{for(let j=0;j<8;j++)i=(i&1)?0xedb88320^(i>>>1):i>>>1;return i>>>0;});function crc32(bytes){let c=0xffffffff;for(let b of bytes)c=table[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0;}
 function zip(files){let enc=new TextEncoder(),chunks=[],central=[],offset=0,clen=0;const make=n=>new Uint8Array(n),w=(a,p,n,v)=>{let d=new DataView(a.buffer);n===2?d.setUint16(p,v,true):d.setUint32(p,v,true);};for(let [name,value] of Object.entries(files)){let n=enc.encode(name),b=typeof value==='string'?enc.encode(value):value,crc=crc32(b),h=make(30+n.length);w(h,0,4,0x04034b50);w(h,4,2,20);w(h,6,2,2048);w(h,12,2,33);w(h,14,4,crc);w(h,18,4,b.length);w(h,22,4,b.length);w(h,26,2,n.length);h.set(n,30);chunks.push(h,b);let ch=make(46+n.length);w(ch,0,4,0x02014b50);w(ch,4,2,20);w(ch,6,2,20);w(ch,8,2,2048);w(ch,14,2,33);w(ch,16,4,crc);w(ch,20,4,b.length);w(ch,24,4,b.length);w(ch,28,2,n.length);w(ch,42,4,offset);ch.set(n,46);central.push(ch);clen+=ch.length;offset+=h.length+b.length;}let end=make(22);w(end,0,4,0x06054b50);w(end,8,2,central.length);w(end,10,2,central.length);w(end,12,4,clen);w(end,16,4,offset);let out=make(offset+clen+22),p=0;for(let b of [...chunks,...central,end]){out.set(b,p);p+=b.length;}return out;}
-const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,validateReference,toGeographic,simulateResearch,sampleConfig,distanceBounds,paceBounds,maxSampleSeconds,geometry,crossing,simulate,validate,describe,sampleStatistics,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
+const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,validateReference,toGeographic,simulateResearch,sampleConfig,distanceBounds,paceBounds,maxSampleSeconds,geometry,crossing,simulate,validate,describe,sampleStatistics,sha256,researchArchive,validateResearchRows,analysisRows,compareResearchGroups,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
 })(globalThis);
