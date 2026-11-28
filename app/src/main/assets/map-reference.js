@@ -71,18 +71,18 @@
   let shapeKey=null,shapeResult=null;
   function refreshShape(){
     const count=$('mapInterpolationCount'),mode=$('mapInterpolation').value;
-    count.min=String(Math.max(nodes.length,$('mapClosed').checked?3:2));if(Number(count.value)<Number(count.min))count.value=count.min;
+    count.min=String(Math.max(nodes.length,$('mapClosed').checked?3:2));
     $('mapSmoothWrap').hidden=mode!=='smooth';
     const key=JSON.stringify([snapshotRef(),count.value,mode,$('mapSmoothness').value]);if(key===shapeKey)return;shapeKey=key;shapeResult=null;
     $('mapUseShape').disabled=true;$('mapShapePreviewBox').hidden=true;$('mapShapePreview').replaceChildren();
-    try{shapeResult=C.referenceLocalRoute(nodes,$('mapClosed').checked,Number(count.value),mode,Number($('mapSmoothness').value)/100);
+    try{if(count.value.trim()===''||!Number.isInteger(Number(count.value))||Number(count.value)<Number(count.min)||Number(count.value)>Number(count.max))throw Error('请输入 '+count.min+'–'+count.max+' 之间的整数，原标点不会丢失。');shapeResult=C.referenceLocalRoute(nodes,$('mapClosed').checked,Number(count.value),mode,Number($('mapSmoothness').value)/100);
       const svg=$('mapShapePreview');svg.setAttribute('viewBox',localViewBox(shapeResult.points));
       const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',path(shapeResult.points,shapeResult.closed));p.setAttribute('fill',shapeResult.closed?'#b9ceb833':'none');p.setAttribute('stroke','#416c55');p.setAttribute('stroke-width','2.2');p.setAttribute('vector-effect','non-scaling-stroke');p.setAttribute('stroke-linejoin','round');svg.append(p);
       $('mapShapePreviewBox').hidden=false;$('mapUseShape').disabled=false;
       $('mapShapeStatus').textContent=nodes.length+' 个标点 → '+shapeResult.points.length+' 个插值节点 · '+shapeResult.length_m.toFixed(1)+' 米'+(shapeResult.closed?'闭合':'开放')+'合成地理参考模型。';
     }catch(e){$('mapShapeStatus').textContent=nodes.length<($('mapClosed').checked?3:2)?'请继续添加标点，闭合路线至少3个点，开放路线至少2个点。':e.message;}
   }
-  for(const id of ['mapInterpolation','mapInterpolationCount','mapSmoothness'])$(id).addEventListener('input',()=>{persistDraft();refreshShape();draw();});
+  for(const id of ['mapInterpolation','mapInterpolationCount','mapSmoothness'])$(id).addEventListener('input',()=>{refreshShape();draw();if(id!=='mapInterpolationCount'||($('mapInterpolationCount').value.trim()!==''&&$('mapInterpolationCount').validity.valid))persistDraft();});
   $('mapUseShape').onclick=()=>{try{if(busy)throw Error('请先结束当前生成任务');if(!shapeResult)throw Error('尚未生成有效预览');mutate(()=>{points=shapeResult.points.map(p=>p.slice());closed=shapeResult.closed;routeReference=C.validateReference(shapeResult.georeference);$('positionMode').value='geo';selected=-1;});$('mapShapeStatus').textContent='已应用此预览路线，可在高级路线编辑中撤销。';go('sim');window.scrollTo(0,0);}catch(e){$('mapShapeStatus').textContent=e.message;}};
   function libraryRead(){const v=JSON.parse(localStorage.getItem(libraryKey)||'[]');if(!Array.isArray(v)||v.length>50)throw Error('收藏数据无效');return v;}
   function libraryWrite(v){if(v.length>50)throw Error('最多收藏50个场地');localStorage.setItem(libraryKey,JSON.stringify(v));}
