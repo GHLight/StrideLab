@@ -497,7 +497,7 @@ try:
         # Generation must preserve an unarchived current run.
         local_page.evaluate("""() => {
             const key='stridelab.projects.v1', existing=JSON.parse(localStorage.getItem(key));
-            const template=existing[0];
+            const template=existing.at(-1); // retain the current archived experiment at capacity
             const entries=Array.from({length:50},(_,i)=> {
               const entry=structuredClone(template);
               entry.id='capacity-'+i;
