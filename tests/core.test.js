@@ -105,3 +105,19 @@ for(const n of [300,500,1000]){
 assert.throws(()=>C.previewReferenceRoute(previewMarks,true,1001,'linear',0));
 assert.throws(()=>C.referenceLocalRoute(previewMarks,true,121,'linear',0));
 console.log('PASS: high-resolution reference geometry previews, unchanged experimental route capacity');
+
+const studyGroup={count:2,distance:.2,pace:6,cv:5,noise:0,profile:'baseline'};
+const study=C.prepareLocalStudy({seed:17,interval:5,groups:[studyGroup,{...studyGroup,profile:'higher'}]});
+assert.equal(study.groups.length,2);
+assert.equal(study.total_points_upper_bound,292);
+assert.notEqual(study.groups[0].config.seed,study.groups[1].config.seed);
+const studyA=C.localStudySample(study.groups[0],0),studyB=C.localStudySample({...study.groups[0],profile:'higher'},0);
+assert.ok(studyA.research_only&&studyB.research_only);
+assert.equal(C.validateResearchRows(studyA).passed,true);
+assert.equal(C.validateResearchRows(studyB).passed,true);
+assert.ok(studyB.summary.mean_hr>studyA.summary.mean_hr);
+assert.ok(studyB.rows.every(r=>!('latitude_deg' in r)&&!('longitude_deg' in r)));
+assert.deepEqual(studyA,C.localStudySample(study.groups[0],0));
+assert.throws(()=>C.prepareLocalStudy({seed:17,interval:5,groups:Array.from({length:5},()=>({...studyGroup,count:30,distance:20,pace:15}))}));
+assert.throws(()=>C.localStudySample({...study.groups[0],config:{...study.groups[0].config,positionMode:'geo'}},0));
+console.log('PASS: independent local multi-group plans, sensitivity profiles, reproducible samples, bounds and geographic separation');
