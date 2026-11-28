@@ -57,9 +57,17 @@
   const libraryKey='stridelab.reference.library.v1';
   const library=document.createElement('details');library.className='reference-library';library.innerHTML='<summary>场地收藏</summary><label class="field"><span>场地名称</span><input id="referenceName" maxlength="60" placeholder="例如：学校操场"></label><button class="wide" id="referenceFavorite">收藏当前参考路线</button><label class="field"><span>已收藏场地</span><select id="referenceSaved"><option value="">暂无收藏</option></select></label><div class="toolbar"><button id="referenceOpen">打开场地</button><button id="referenceRemove">删除收藏</button></div><p class="hint" id="referenceLibraryStatus"></p>';
   $('mapSave').closest('.toolbar').after(library);
-  const shapeCard=document.createElement('div');shapeCard.className='card';shapeCard.style.boxShadow='none';
-  shapeCard.innerHTML='<h3>② 路线插值与预览</h3><p class="hint">沿路线依次标点，推荐4–10个；弯道多添加贴合场地的标点。地图虚线是原始参考连线，蓝色实线是插值后的合成路线。下图显示保留原形状及尺度的拟合路线；应用后将使用地图参考经纬度生成合成研究样本。</p><label class="field"><span>插值方式</span><select id="mapInterpolation"><option value="linear">直线插值</option><option value="smooth">平滑插值</option></select></label><label class="field"><span>节点总数（含原标点）</span><input id="mapInterpolationCount" type="number" min="3" max="120" step="1" value="60"></label><label id="mapSmoothWrap" class="field" hidden><span>平滑程度</span><input id="mapSmoothness" type="range" min="0" max="100" step="5" value="50"></label><div id="mapShapePreviewBox" class="canvas" hidden><svg id="mapShapePreview" viewBox="-125 -110 250 220" aria-label="局部路线插值预览"></svg></div><p id="mapShapeStatus" class="hint" aria-live="polite">请先添加参考标点。</p><button id="mapUseShape" class="primary wide" disabled>使用预览路线并配置模拟 →</button><p class="hint">此操作替换当前局部路线，可撤销；不改变历史实验。合成经纬度并非设备实测。</p>';
-  $('mapAdd').closest('.toolbar').after(shapeCard);
+  const shapeCard=document.createElement('div');shapeCard.className='route-preview-card';shapeCard.id='routePreviewCard';
+  shapeCard.innerHTML='<h3>② 路线插值与预览</h3><p class="hint">蓝线为插值路线，虚线为原始标点连线。路线保留原始尺度与地理参考；模拟观测并非实测。</p><label class="field"><span>插值方式</span><select id="mapInterpolation"><option value="linear">直线插值</option><option value="smooth">平滑插值</option></select></label><label class="field"><span>节点总数（含原标点）</span><input id="mapInterpolationCount" type="number" min="3" max="120" step="1" value="60"></label><label id="mapSmoothWrap" class="field" hidden><span>平滑程度</span><input id="mapSmoothness" type="range" min="0" max="100" step="5" value="50"></label><div id="mapShapePreviewBox" class="canvas" hidden><svg id="mapShapePreview" viewBox="-125 -110 250 220" aria-label="局部路线插值预览"></svg></div><p id="mapShapeStatus" class="hint" aria-live="polite">请先添加参考标点。</p><button id="mapUseShape" class="primary wide" disabled>使用此参考路线 →</button><p class="hint">应用预览后进入模拟页，可撤销，不改变历史实验。</p>';
+  const markBar=$('mapAdd').closest('.toolbar');markBar.classList.add('mark-toolbar');
+  const metrics=$('mapCount').closest('.grid');markBar.after(metrics);metrics.after(shapeCard);
+  const editFold=document.createElement('details');editFold.id='mapEditFold';editFold.className='map-tool-fold';editFold.innerHTML='<summary>编辑节点与闭合设置</summary>';
+  shapeCard.after(editFold);editFold.append($('mapNode').closest('.field'),$('mapMove').closest('.toolbar'),$('mapClosed').closest('.row'));
+  const toolsFold=document.createElement('details');toolsFold.id='mapStorageFold';toolsFold.className='map-tool-fold';toolsFold.innerHTML='<summary>保存与收藏</summary>';
+  editFold.after(toolsFold);toolsFold.append($('mapSave').closest('.toolbar'),library);
+  const sourceStatus=$('mapStatus');markBar.after(sourceStatus);
+  $('mapAdd').textContent='添加标点';$('mapSave').textContent='保存原始参考点';
+  const legend=document.createElement('p');legend.className='hint';legend.textContent='蓝线 · 插值参考路线　虚线 · 原始连线';markBar.before(legend);
   let shapeKey=null,shapeResult=null;
   function refreshShape(){
     const count=$('mapInterpolationCount'),mode=$('mapInterpolation').value;
@@ -72,7 +80,7 @@
       const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',path(shapeResult.points,shapeResult.closed));p.setAttribute('fill',shapeResult.closed?'#b9ceb833':'none');p.setAttribute('stroke','#416c55');p.setAttribute('stroke-width','2.2');p.setAttribute('vector-effect','non-scaling-stroke');p.setAttribute('stroke-linejoin','round');svg.append(p);
       $('mapShapePreviewBox').hidden=false;$('mapUseShape').disabled=false;
       $('mapShapeStatus').textContent=nodes.length+' 个标点 → '+shapeResult.points.length+' 个插值节点 · '+shapeResult.length_m.toFixed(1)+' 米'+(shapeResult.closed?'闭合':'开放')+'合成地理参考模型。';
-    }catch(e){$('mapShapeStatus').textContent=e.message;}
+    }catch(e){$('mapShapeStatus').textContent=nodes.length<($('mapClosed').checked?3:2)?'请继续添加标点，闭合路线至少3个点，开放路线至少2个点。':e.message;}
   }
   for(const id of ['mapInterpolation','mapInterpolationCount','mapSmoothness'])$(id).addEventListener('input',()=>{persistDraft();refreshShape();draw();});
   $('mapUseShape').onclick=()=>{try{if(busy)throw Error('请先结束当前生成任务');if(!shapeResult)throw Error('尚未生成有效预览');mutate(()=>{points=shapeResult.points.map(p=>p.slice());closed=shapeResult.closed;routeReference=C.validateReference(shapeResult.georeference);$('positionMode').value='geo';selected=-1;});$('mapShapeStatus').textContent='已应用此预览路线，可在高级路线编辑中撤销。';go('sim');window.scrollTo(0,0);}catch(e){$('mapShapeStatus').textContent=e.message;}};
