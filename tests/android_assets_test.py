@@ -430,7 +430,15 @@ try:
         local_page.click("#download")
         sweep_export=local_page.evaluate("window.__exports.at(-1)")
         with zipfile.ZipFile(io.BytesIO(base64.b64decode(sweep_export["data"]))) as z:
+            import hashlib
             manifest=json.loads(z.read("manifest.json"))
+            assert manifest["integrity_algorithm"]=="SHA-256"
+            assert "README.txt" in z.namelist()
+            assert all(hashlib.sha256(z.read(n)).hexdigest()==h for n,h in manifest["file_hashes"].items())
+            for line in z.read("checksums.sha256").decode().splitlines():
+                h,n=line.split("  ",1)
+                assert hashlib.sha256(z.read(n)).hexdigest()==h
+            assert all(x["passed"] for x in json.loads(z.read("quality.json")))
             targets=[s["target_distance_m"] for s in manifest["summary"]]
             assert len(set(targets))==5 and all(1900<=d<=2100 for d in targets)
             for i,s in enumerate(manifest["summary"]):
@@ -445,6 +453,32 @@ try:
         local_page.locator('nav [data-go="files"]').click()
         local_page.click("#download")
         assert local_page.evaluate("window.__exports.at(-1).data")==sweep_export["data"]
+        local_page.locator('nav [data-go="analysis"]').click()
+        local_page.locator("#localSampleTools > summary").click()
+        local_page.click("#verifySampleReplay")
+        expect(local_page.locator("#sampleReviewStatus")).to_contain_text("复现一致")
+        local_page.click("#exportSampleJson")
+        review=json.loads(base64.b64decode(local_page.evaluate("window.__exports.at(-1).data")))
+        assert review["synthetic"] is True and review["quality"]["passed"]
+        local_page.select_option("#analysisInterval","5")
+        local_page.click("#exportAnalysisCsv")
+        analysis_rows=list(csv.DictReader(io.StringIO(base64.b64decode(local_page.evaluate("window.__exports.at(-1).data")).decode())))
+        assert len(analysis_rows)<len(review["sample"]["rows"])
+        assert int(analysis_rows[-1]["t"])==review["sample"]["rows"][-1]["t"]
+        assert all(r["analysis_view"]=="true" for r in analysis_rows)
+        # A second saved local experiment enables a comparison without modifying either archive.
+        local_page.locator('nav [data-go="sim"]').click()
+        local_page.fill("#distance","2.05")
+        local_page.click("#generate")
+        expect(local_page.locator("#analysis")).to_be_visible(timeout=30000)
+        local_page.locator("#groupCompareFold > summary").click()
+        expect(local_page.locator("#compareGroups")).to_be_enabled()
+        local_page.click("#compareGroups")
+        expect(local_page.locator("#groupCompareBody tr")).to_have_count(2)
+        local_page.click("#exportGroupComparison")
+        comparison=json.loads(base64.b64decode(local_page.evaluate("window.__exports.at(-1).data")))
+        assert comparison["synthetic"] is True and len(comparison["groups"])==2
+        assert all(g["valid_count"]==g["n"] for g in comparison["groups"])
         # Simulate an archive at capacity using configuration metadata only.
         # Generation must preserve an unarchived current run.
         local_page.evaluate("""() => {
