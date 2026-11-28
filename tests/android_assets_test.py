@@ -414,6 +414,39 @@ try:
         local_page.locator('nav [data-go="files"]').click()
         local_page.click("#download")
         assert local_page.evaluate("window.__exports.at(-1).data")==sweep_export["data"]
+        # Simulate an archive at capacity using configuration metadata only.
+        # Generation must preserve an unarchived current run.
+        local_page.evaluate("""() => {
+            const key='stridelab.projects.v1', existing=JSON.parse(localStorage.getItem(key));
+            const template=existing[0];
+            const entries=Array.from({length:50},(_,i)=> {
+              const entry=structuredClone(template);
+              entry.id='capacity-'+i;
+              if(i) entry.snapshot.config.seed=10000+i;
+              // Timelines are independent of seed in the fixed-gap case.
+              return entry;
+            });
+            localStorage.setItem(key,JSON.stringify(entries));
+        }""")
+        local_page.locator('nav [data-go="sim"]').click()
+        local_page.fill("#distance","2.1")
+        local_page.click("#generate")
+        expect(local_page.locator("#analysis")).to_be_visible()
+        saved=local_page.evaluate("localStorage.getItem('stridelab.completed.v1')")
+        assert json.loads(saved)["config"]["distance"]==2.1
+        local_page.locator('nav [data-go="sim"]').click()
+        local_page.fill("#distance","2.2")
+        local_page.click("#generate")
+        expect(local_page.locator("#status")).to_contain_text("当前结果尚未归档")
+        assert local_page.evaluate("localStorage.getItem('stridelab.completed.v1')")==saved
+        local_page.locator('nav [data-go="files"]').click()
+        fold=local_page.locator("#fileHistoryFold")
+        if not fold.evaluate("(el)=>el.open"):
+            fold.locator("xpath=./summary").click()
+        local_page.click("#projectBackup")
+        capacity_backup=json.loads(base64.b64decode(local_page.evaluate("window.__exports.at(-1).data")))
+        assert len(capacity_backup["projects"])==50
+        assert capacity_backup["unarchived_current"]["snapshot"]==json.loads(saved)
         local_page.close()
         assert not errors, errors
         browser.close()
