@@ -202,8 +202,36 @@ function compareResearchGroups(groups){
   return {id:String(g.id),label:String(g.label),synthetic:true,n:g.sessions.length,distance_m:describe(g.sessions.map(s=>s.summary.model_distance_m)),pace_sec_km:describe(g.sessions.map(s=>s.summary.pace_sec_km)),mean_hr_bpm:describe(g.sessions.map(s=>s.summary.mean_hr)),steady_speed_cv_pct:describe(stats.map(x=>x.steady_speed_cv_pct)),rms_error_m:describe(g.sessions.map(s=>s.summary.rms_error_m)),valid_count:g.sessions.filter(s=>validateResearchRows(s).passed).length};
  });
 }
+// Independent local research groups. No geographic reference or absolute activity time.
+const STUDY_PROFILES=Object.freeze({baseline:{label:'基准模型',hrOffset:0,cadenceOffset:0},lower:{label:'低响应敏感性',hrOffset:-8,cadenceOffset:-6},higher:{label:'高响应敏感性',hrOffset:8,cadenceOffset:6}});
+function prepareLocalStudy(plan){
+ if(!plan||!Number.isInteger(plan.seed)||plan.seed<0||plan.seed>4294967295||!Array.isArray(plan.groups)||plan.groups.length<1||plan.groups.length>5||![1,2,5,10,15,30].includes(plan.interval))throw Error('局部实验计划参数无效');
+ let total=0;
+ const groups=plan.groups.map((g,i)=>{
+  if(!g||!Object.hasOwn(STUDY_PROFILES,g.profile))throw Error('实验组模型档案无效');
+  const cfg={count:g.count,distance:g.distance,pace:g.pace,cv:g.cv,noise:g.noise,seed:(plan.seed+Math.imul(i,0x9e3779b1))>>>0,fixedStart:0,randomStart:false,direction:'forward',fatigue:'normal',accel:true,decel:true,positionMode:'none'};
+  validate(cfg);total+=cfg.count*(maxSampleSeconds(cfg)+1);
+  return {id:'GROUP-'+(i+1),profile:g.profile,config:cfg};
+ });
+ if(total>60000)throw Error('多组合计最多60000个原始采样点');
+ return {synthetic:true,research_only:true,seed:plan.seed,interval:plan.interval,total_points_upper_bound:total,groups};
+}
+function localStudySample(group,index){
+ if(!group||group.config?.positionMode!=='none'||!Object.hasOwn(STUDY_PROFILES,group.profile)||!Number.isInteger(index)||index<0||index>=group.config.count)throw Error('无效的局部实验任务');
+ const s=simulateResearch(group.config,standardTrack(),true,index),p=STUDY_PROFILES[group.profile];
+ if(group.profile!=='baseline'){
+  let steps=0;
+  for(const [i,r] of s.rows.entries()){
+   r.hr_bpm=bounded(r.hr_bpm+p.hrOffset,0,220);
+   if(i&&r.speed_mps>0){r.cadence_spm=bounded(r.cadence_spm+p.cadenceOffset,1,220);r.step_length_m=r.speed_mps*60/r.cadence_spm;steps+=r.cadence_spm*(r.t-s.rows[i-1].t)/60;}
+  }
+  s.summary.steps=Math.round(steps);s.summary.mean_hr=s.rows.reduce((sum,r)=>sum+r.hr_bpm,0)/s.rows.length;
+ }
+ s.study_group=group.id;s.profile=group.profile;s.research_only=true;
+ return s;
+}
 function csv(rows){if(!rows.length)return '';let keys=Object.keys(rows[0]);return keys.join(',')+'\n'+rows.map(r=>keys.map(k=>typeof r[k]==='number'?String(Math.round(r[k]*1e6)/1e6):r[k]??'').join(',')).join('\n')+'\n';}
 const table=Array.from({length:256},(_,i)=>{for(let j=0;j<8;j++)i=(i&1)?0xedb88320^(i>>>1):i>>>1;return i>>>0;});function crc32(bytes){let c=0xffffffff;for(let b of bytes)c=table[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0;}
 function zip(files){let enc=new TextEncoder(),chunks=[],central=[],offset=0,clen=0;const make=n=>new Uint8Array(n),w=(a,p,n,v)=>{let d=new DataView(a.buffer);n===2?d.setUint16(p,v,true):d.setUint32(p,v,true);};for(let [name,value] of Object.entries(files)){let n=enc.encode(name),b=typeof value==='string'?enc.encode(value):value,crc=crc32(b),h=make(30+n.length);w(h,0,4,0x04034b50);w(h,4,2,20);w(h,6,2,2048);w(h,12,2,33);w(h,14,4,crc);w(h,18,4,b.length);w(h,22,4,b.length);w(h,26,2,n.length);h.set(n,30);chunks.push(h,b);let ch=make(46+n.length);w(ch,0,4,0x02014b50);w(ch,4,2,20);w(ch,6,2,20);w(ch,8,2,2048);w(ch,14,2,33);w(ch,16,4,crc);w(ch,20,4,b.length);w(ch,24,4,b.length);w(ch,28,2,n.length);w(ch,42,4,offset);ch.set(n,46);central.push(ch);clen+=ch.length;offset+=h.length+b.length;}let end=make(22);w(end,0,4,0x06054b50);w(end,8,2,central.length);w(end,10,2,central.length);w(end,12,4,clen);w(end,16,4,offset);let out=make(offset+clen+22),p=0;for(let b of [...chunks,...central,end]){out.set(b,p);p+=b.length;}return out;}
-const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,previewReferenceRoute,validateReference,toGeographic,simulateResearch,sampleConfig,distanceBounds,paceBounds,maxSampleSeconds,geometry,crossing,simulate,validate,describe,sampleStatistics,sha256,researchArchive,validateResearchRows,analysisRows,compareResearchGroups,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
+const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,previewReferenceRoute,validateReference,toGeographic,simulateResearch,sampleConfig,distanceBounds,paceBounds,maxSampleSeconds,geometry,crossing,simulate,validate,describe,sampleStatistics,sha256,researchArchive,validateResearchRows,analysisRows,compareResearchGroups,STUDY_PROFILES,prepareLocalStudy,localStudySample,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
 })(globalThis);
