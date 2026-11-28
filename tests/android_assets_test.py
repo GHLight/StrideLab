@@ -291,6 +291,20 @@ try:
         count_field.fill("1")
         expect(count_field).to_have_value("1")
         expect(page.locator("#mapUseShape")).to_be_disabled()
+        count_field.fill("300")
+        expect(page.locator("#mapShapeStatus")).to_contain_text("300 个插值节点")
+        expect(page.locator("#mapUseShape")).to_be_disabled()
+        expect(page.locator("#mapPreviewExport")).to_be_enabled()
+        page.fill("#nominalRouteLength","80")
+        expect(page.locator("#referenceGeometryMetrics")).to_contain_text("标称 80.0 m")
+        page.click("#mapPreviewExport")
+        preview_json=json.loads(base64.b64decode(page.evaluate("window.__exports.at(-1).data")))
+        assert preview_json["properties"]["purpose"]=="reference_geometry_only"
+        assert len(preview_json["geometry"]["coordinates"])==301
+        assert "timestamp" not in preview_json["properties"]
+        page.reload()
+        expect(count_field).to_have_value("300")
+        expect(page.locator("#nominalRouteLength")).to_have_value("80")
         count_field.fill("80")
         page.select_option("#mapInterpolation","smooth")
         expect(page.locator("#mapShapeStatus")).to_contain_text("80 个插值节点")
