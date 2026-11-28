@@ -94,3 +94,14 @@ const analysis=C.analysisRows(a,5);assert.equal(analysis.length,145);assert.equa
 assert.throws(()=>C.analysisRows({...a,position_source:'synthetic_map_reference'},5));
 const comp=C.compareResearchGroups([{id:'a',label:'A',sessions:[a,z]},{id:'b',label:'B',sessions:[z]}]);assert.equal(comp[0].n,2);assert.equal(comp[0].valid_count,2);assert.equal(comp[1].rms_error_m.mean,0);assert.throws(()=>C.compareResearchGroups([]));
 console.log('PASS: independent SHA256 vectors, row validation, immutable local analysis and archived-group comparison');
+
+const previewMarks=[[0,0],[0,.001],[.001,.001],[.001,0]];
+const basePreview=C.referenceLocalRoute(previewMarks,true,120,'linear',0);
+for(const n of [300,500,1000]){
+ const v=C.previewReferenceRoute(previewMarks,true,n,'linear',0);
+ assert.equal(v.points.length,n);assert.equal(v.preview_only,true);assert.equal(v.purpose,'reference_geometry_only');
+ assert.ok(Math.abs(v.length_m-basePreview.length_m)<1e-7);
+}
+assert.throws(()=>C.previewReferenceRoute(previewMarks,true,1001,'linear',0));
+assert.throws(()=>C.referenceLocalRoute(previewMarks,true,121,'linear',0));
+console.log('PASS: high-resolution reference geometry previews, unchanged experimental route capacity');
