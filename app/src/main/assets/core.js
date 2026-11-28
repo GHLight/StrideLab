@@ -81,6 +81,7 @@ function simulateResearch(c,points,closed,index,reference=null){
  const ref=mode==='geo'?validateReference(reference):null;
  validate(c);const resolved=sampleConfig(c,index),s=simulate(resolved,points,closed,index);
  if(c.distanceSpreadM)s.summary.target_distance_m=resolved.distance*1000;
+ if(c.paceSpreadSec)s.summary.target_pace_sec_km=resolved.pace*60;
  if(ref){
   s.position_source='synthetic_map_reference';s.summary.position_source=s.position_source;
   for(const row of s.rows){const ideal=toGeographic([row.ideal_x_m,row.ideal_y_m],ref),observed=toGeographic([row.observed_x_m,row.observed_y_m],ref);
@@ -95,15 +96,15 @@ function bounded(v,a,b){return Math.max(a,Math.min(b,v));}
 // Local-only parameter sweep for statistical sensitivity experiments.
 // Legacy configurations (zero/absent spread) retain their exact results.
 function sampleConfig(c,index){
- const spread=c.distanceSpreadM??0;
- if(!Number.isFinite(spread)||spread<0||spread>5000)throw Error('距离浮动须为0–5000米');
- if(!spread)return c;
- if((c.positionMode??'none')!=='none')throw Error('距离区间实验仅用于无GPS局部研究');
+ const spread=c.distanceSpreadM??0,paceSpread=c.paceSpreadSec??0;
+ distanceBounds(c);paceBounds(c);
+ if(!spread&&!paceSpread)return c;
  if(!Number.isInteger(index)||index<0||index>=c.count)throw Error('样本索引无效');
  const r=rng((c.seed^0x44535452^Math.imul(index+1,0x9e3779b1))>>>0);
+ const rp=rng((c.seed^0x50414345^Math.imul(index+1,0x9e3779b1))>>>0);
  const d=c.distance+(2*r()-1)*spread/1000;
- const pace=c.durationMode==='duration'?c.distance*c.pace/d:c.pace;
- return {...c,distance:d,pace,distanceSpreadM:0};
+ const pace=c.durationMode==='duration'?c.distance*c.pace/d:c.pace+(2*rp()-1)*paceSpread/60;
+ return {...c,distance:d,pace,distanceSpreadM:0,paceSpreadSec:0};
 }
 function distanceBounds(c){
  const spread=c.distanceSpreadM??0;
@@ -114,7 +115,20 @@ function distanceBounds(c){
  if(spread&&c.durationMode==='duration'&&(c.distance*c.pace/hi<3||c.distance*c.pace/lo>15))throw Error('固定时长下距离范围对应配速超限');
  return [lo,hi];
 }
-function validate(c){for(const [k,min,max] of [['count',1,30],['distance',.1,20],['pace',3,15],['cv',0,20],['noise',0,30],['seed',0,4294967295],['fixedStart',0,100]])if(!Number.isFinite(c[k])||c[k]<min||c[k]>max)throw Error('参数超出范围：'+k);const bounds=distanceBounds(c);if(c.count*(Math.round((c.durationMode==='duration'?c.distance:bounds[1])*c.pace*60)+1)>60000)throw Error('V0.1 单批最多60000个采样点，请减少样本数或时长');if(!Number.isInteger(c.count)||!Number.isInteger(c.seed))throw Error('次数和种子必须是整数');if(!['forward','reverse','random'].includes(c.direction)||!['none','normal','high'].includes(c.fatigue))throw Error('运动模式无效');}
+function paceBounds(c){
+ const spread=c.paceSpreadSec??0;
+ if(!Number.isFinite(spread)||spread<0||spread>300)throw Error('配速浮动须为0–300秒/公里');
+ if(spread&&(c.positionMode??'none')!=='none')throw Error('配速区间实验仅用于无GPS局部研究');
+ if(spread&&c.durationMode==='duration')throw Error('固定时长模式不能独立设置配速浮动');
+ const lo=c.pace-spread/60,hi=c.pace+spread/60;
+ if(lo<3||hi>15)throw Error('配速浮动后须在3–15分钟/公里内');
+ return [lo,hi];
+}
+function maxSampleSeconds(c){
+ const bounds=distanceBounds(c),pb=paceBounds(c);
+ return Math.round(c.durationMode==='duration'?c.distance*c.pace*60:bounds[1]*pb[1]*60);
+}
+function validate(c){for(const [k,min,max] of [['count',1,30],['distance',.1,20],['pace',3,15],['cv',0,20],['noise',0,30],['seed',0,4294967295],['fixedStart',0,100]])if(!Number.isFinite(c[k])||c[k]<min||c[k]>max)throw Error('参数超出范围：'+k);if(c.count*(maxSampleSeconds(c)+1)>60000)throw Error('V0.1 单批最多60000个采样点，请减少样本数或时长');if(!Number.isInteger(c.count)||!Number.isInteger(c.seed))throw Error('次数和种子必须是整数');if(!['forward','reverse','random'].includes(c.direction)||!['none','normal','high'].includes(c.fatigue))throw Error('运动模式无效');}
 function simulate(c,points,closed,index){validate(c);let seed=(c.seed+Math.imul(index+1,2654435761))>>>0,r=rng(seed),g=geometry(points,closed),distance=c.distance*1000;if(!closed&&distance>g.len+.01)throw Error('开放路线的目标距离不能超过路线长度');let seconds=Math.max(1,Math.round(c.distance*c.pace*60));if(seconds>18000)throw Error('单次样本时间过长');let v=[],state=0;for(let t=0;t<seconds;t++){let f=t/Math.max(1,seconds-1),fat=c.fatigue==='high'?.16:c.fatigue==='normal'?.07:0;state=.94*state+Math.sqrt(1-.94*.94)*normal(r);let ramp=(c.accel?Math.min(1,(t+1)/10):1)*(c.decel?Math.min(1,(seconds-t)/12):1);v.push(Math.max(.05,(1-fat*f+c.cv/100*bounded(state,-2.5,2.5))*ramp));}let scale=distance/v.reduce((a,b)=>a+b,0),dir=c.direction==='random'?(r()<.5?-1:1):c.direction==='reverse'?-1:1,start=closed?(c.randomStart?r()*g.len:c.fixedStart/100*g.len):(dir===1?0:g.len),s=0,hr=85,steps=0,obsDist=0,prev=null,rows=[],errSq=0;for(let t=0;t<=seconds;t++){let speed=t===0?0:v[t-1]*scale;if(t)s+=speed;let p=pos(g,start+dir*s); // Independent controlled observation perturbation for local-coordinate research.
 let e=c.noise===0?[0,0]:[normal(r)*c.noise/Math.SQRT2,normal(r)*c.noise/Math.SQRT2],o=[p[0]+e[0],p[1]+e[1]];errSq+=e[0]**2+e[1]**2;if(prev)obsDist+=Math.hypot(o[0]-prev[0],o[1]-prev[1]);prev=o;let cadence=speed>0?bounded(125+14*speed,110,200):0,step=cadence?speed*60/cadence:0;if(t){steps+=cadence/60;hr+=(bounded(80+26*speed,80,185)-hr)*.035;}rows.push({t,ideal_x_m:p[0],ideal_y_m:p[1],observed_x_m:o[0],observed_y_m:o[1],speed_mps:speed,distance_m:s,hr_bpm:hr,cadence_spm:cadence,step_length_m:step,ground_contact_ms:speed>0?bounded(330-23*speed,150,350):null,vertical_oscillation_mm:speed>0?bounded(58+7*speed,45,110):null,synthetic:true});}return {id:`SIM-${index+1}`,seed,rows,summary:{id:`SIM-${index+1}`,synthetic:true,seed,seconds,model_distance_m:s,observed_distance_m:obsDist,pace_sec_km:seconds/(s/1000),steps:Math.round(steps),mean_hr:rows.reduce((a,b)=>a+b.hr_bpm,0)/rows.length,rms_error_m:Math.sqrt(errSq/rows.length),start_m:start,direction:dir,route_length_m:g.len}};}
 // Derived research statistics are independent of the generation engine.
@@ -135,5 +149,5 @@ function sampleStatistics(session){
 function csv(rows){if(!rows.length)return '';let keys=Object.keys(rows[0]);return keys.join(',')+'\n'+rows.map(r=>keys.map(k=>typeof r[k]==='number'?String(Math.round(r[k]*1e6)/1e6):r[k]??'').join(',')).join('\n')+'\n';}
 const table=Array.from({length:256},(_,i)=>{for(let j=0;j<8;j++)i=(i&1)?0xedb88320^(i>>>1):i>>>1;return i>>>0;});function crc32(bytes){let c=0xffffffff;for(let b of bytes)c=table[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0;}
 function zip(files){let enc=new TextEncoder(),chunks=[],central=[],offset=0,clen=0;const make=n=>new Uint8Array(n),w=(a,p,n,v)=>{let d=new DataView(a.buffer);n===2?d.setUint16(p,v,true):d.setUint32(p,v,true);};for(let [name,value] of Object.entries(files)){let n=enc.encode(name),b=typeof value==='string'?enc.encode(value):value,crc=crc32(b),h=make(30+n.length);w(h,0,4,0x04034b50);w(h,4,2,20);w(h,6,2,2048);w(h,12,2,33);w(h,14,4,crc);w(h,18,4,b.length);w(h,22,4,b.length);w(h,26,2,n.length);h.set(n,30);chunks.push(h,b);let ch=make(46+n.length);w(ch,0,4,0x02014b50);w(ch,4,2,20);w(ch,6,2,20);w(ch,8,2,2048);w(ch,14,2,33);w(ch,16,4,crc);w(ch,20,4,b.length);w(ch,24,4,b.length);w(ch,28,2,n.length);w(ch,42,4,offset);ch.set(n,46);central.push(ch);clen+=ch.length;offset+=h.length+b.length;}let end=make(22);w(end,0,4,0x06054b50);w(end,8,2,central.length);w(end,10,2,central.length);w(end,12,4,clen);w(end,16,4,offset);let out=make(offset+clen+22),p=0;for(let b of [...chunks,...central,end]){out.set(b,p);p+=b.length;}return out;}
-const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,validateReference,toGeographic,simulateResearch,sampleConfig,distanceBounds,geometry,crossing,simulate,validate,describe,sampleStatistics,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
+const api={VERSION,DECLARATION,standardTrack,referenceTrackShape,interpolateLocalRoute,referenceLocalRoute,validateReference,toGeographic,simulateResearch,sampleConfig,distanceBounds,paceBounds,maxSampleSeconds,geometry,crossing,simulate,validate,describe,sampleStatistics,csv,zip};if(typeof module!=='undefined')module.exports=api;else root.StrideCore=api;
 })(globalThis);
