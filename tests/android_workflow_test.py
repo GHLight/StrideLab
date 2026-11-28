@@ -67,7 +67,7 @@ for permission in ['android.permission.ACCESS_COARSE_LOCATION','android.permissi
     adb('shell','pm','clear-permission-flags','lab.stridelab',permission,'user-set','user-fixed')
     adb('shell','pm','grant','lab.stridelab',permission)
 adb('shell','am','force-stop','lab.stridelab');adb('shell','am','start','-W','-n','lab.stridelab/.MainActivity');time.sleep(2)
-click('模拟');click('生成研究样本',scroll=True);time.sleep(2)
+click('模拟');click('生成模拟',scroll=True);time.sleep(2)
 click('分析');assert_analysis();capture('android-generated-analysis')
 adb('shell','am','force-stop','lab.stridelab');adb('shell','am','start','-W','-n','lab.stridelab/.MainActivity');time.sleep(2)
 click('分析');assert_analysis();capture('android-restored-analysis')
