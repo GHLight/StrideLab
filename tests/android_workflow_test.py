@@ -22,14 +22,25 @@ def center(n):
 def click(label,scroll=False):
     for attempt in range(18 if scroll else 4):
         root=tree()
-        for n in root.iter('node'):
+        nodes=list(root.iter('node'))
+        # The accessibility tree includes controls painted underneath the fixed nav.
+        # Its buttons begin below the nav background, so keep a conservative inset.
+        nav_tops=[]
+        for node in nodes:
+            if node.get('text') in {'场地','模拟','分析','文件'} and center(node):
+                bounds=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
+                if node.get('clickable')=='true' and bounds[1]>400:
+                    nav_tops.append(bounds[1])
+        content_bottom=min(nav_tops)-16 if nav_tops else 510
+        for n in nodes:
             if n.get('text')==label or n.get('content-desc')==label:
                 c=center(n)
                 if c and n.get('enabled')=='true':
-                    # WebView exposes some offscreen nodes with bounds below the fixed navigation.
-                    if scroll and c[1]>540:continue
+                    if scroll:
+                        bounds=list(map(int,re.findall(r'\d+',n.get('bounds',''))))
+                        if bounds[1]<30 or bounds[3]>content_bottom:continue
                     adb('shell','input','tap',str(c[0]),str(c[1]));time.sleep(.8);return
-        if scroll:adb('shell','input','swipe','160','490','160','170','350')
+        if scroll:adb('shell','input','swipe','160',str(min(490,content_bottom-12)),'160','170','350')
         time.sleep(.5)
     raise AssertionError('Visible Android control missing: '+label)
 def capture(name):
