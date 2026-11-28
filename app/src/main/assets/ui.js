@@ -300,3 +300,23 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
  try{const v=read(COMPLETE);if(v&&v.synthetic===true&&v.engine===C.VERSION){C.prepareLocalStudy(v.plan);if(Array.isArray(v.summary)){completed=v;renderSummary(v.summary);$('studyExport').disabled=false;status('已恢复上次局部多组研究配置。');}}$('studyResume').hidden=!read(PENDING);}catch(e){status('多组研究记录无法恢复：'+e.message);}
  renderGroups();
 })();
+
+/* Consistent inline choices and progressive disclosure, retaining select state. */
+window.addEventListener('DOMContentLoaded',()=>{
+ const settings=$('speedPreview').closest('.card');
+ const advanced=document.createElement('details');advanced.className='card export-fold';advanced.id='motionAdvancedFold';advanced.innerHTML='<summary>高级 · 速度与观测模型</summary>';
+ settings.before(advanced);advanced.append(settings);settings.style.margin='8px 0 0';settings.style.boxShadow='none';
+ const selectors={positionMode:{none:'无GPS局部',geo:'地图参考合成'},durationMode:{pace:'距离 + 配速',duration:'距离 + 时长'},direction:{forward:'正向',reverse:'反向',random:'随机'},fatigue:{none:'无',normal:'普通',high:'较高'},mapInterpolation:{linear:'直线插值',smooth:'平滑插值'},mapProvider:{street:'街道',satellite:'卫星'}};
+ const syncers=[];
+ for(const [id,names]of Object.entries(selectors)){
+  const el=$(id);if(!el||el.tagName!=='SELECT'||!el.parentElement)continue;
+  const group=document.createElement('div');group.id=id+'-segments';group.className='segment-control';group.setAttribute('role','group');group.setAttribute('aria-label',el.closest('label')?.querySelector('span')?.textContent||id);
+  for(const op of el.options){const button=document.createElement('button');button.type='button';button.dataset.choice=op.value;button.textContent=names[op.value]||op.textContent;button.onclick=()=>{if(el.disabled||button.disabled)return;el.value=op.value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));syncAll();};group.append(button);}
+  const sync=()=>{for(const b of group.children){const active=b.dataset.choice===el.value;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));b.disabled=el.disabled||!!Array.from(el.options).find(o=>o.value===b.dataset.choice)?.disabled;}};
+  el.hidden=true;el.after(group);el.addEventListener('input',sync);el.addEventListener('change',sync);syncers.push(sync);
+ }
+ function syncAll(){for(const fn of syncers)fn();}
+ const prior=refreshConfig;refreshConfig=function(){prior();syncAll();};
+ const priorGo=go;go=function(id,record=true){priorGo(id,record);syncAll();};
+ document.addEventListener('click',()=>queueMicrotask(syncAll));syncAll();
+});
