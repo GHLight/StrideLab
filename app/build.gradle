@@ -1,4 +1,15 @@
 plugins { id 'com.android.application' }
-android { namespace 'lab.stridelab'; compileSdk 35
- defaultConfig { applicationId 'lab.stridelab'; minSdk 24; targetSdk 35; versionCode 2; versionName '0.1.0' }
+// CI build identity is independent from the simulation engine version.
+def ciRun = System.getenv('GITHUB_RUN_NUMBER')
+def buildNumber = (ciRun != null && ciRun.isInteger()) ? ciRun.toInteger() : 0
+android {
+ namespace 'lab.stridelab'
+ compileSdk 35
+ defaultConfig {
+  applicationId 'lab.stridelab'
+  minSdk 24
+  targetSdk 35
+  versionCode 1000 + buildNumber
+  versionName "0.1.0-" + (buildNumber > 0 ? "build.${buildNumber}" : "local")
+ }
 }
