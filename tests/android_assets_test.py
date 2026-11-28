@@ -128,6 +128,7 @@ try:
         expect(page.locator("#summaryBody tr")).to_have_count(3)
         expect(page.locator("#rms")).to_have_text("0.00")
         expect(page.locator("#qualitySummary")).to_have_text("基础一致性检查通过")
+        expect(page.locator("#results .source-label")).to_have_text("模拟数据 · 非实测")
         expect(page.locator("#qualityIntegral")).to_have_text("0.0000%")
         page.screenshot(path=str(OUT/"analysis.png"), full_page=True)
         page.locator('nav [data-go="files"]').click()
@@ -425,12 +426,12 @@ try:
         local_page.fill("#distanceSpreadM","100")
         local_page.fill("#paceSpreadSec","20")
         # Open the advanced parameter section as a user would.
-        seed_details=local_page.locator("#seed").locator("xpath=ancestor::details")
-        if seed_details.count():
-            for j in reversed(range(seed_details.count())):
-                fold=seed_details.nth(j)
-                if not fold.evaluate("(el)=>el.open"):
-                    fold.locator("xpath=./summary").click()
+        outer=local_page.locator("#motionAdvancedFold")
+        if not outer.evaluate("(el)=>el.open"):
+            outer.locator("xpath=./summary").click()
+        inner=local_page.locator("#seed").locator("xpath=ancestor::details[1]")
+        if not inner.evaluate("(el)=>el.open"):
+            inner.locator("xpath=./summary").click()
         expect(local_page.locator("#seed")).to_be_visible()
         local_page.fill("#seed","17")
         expect(local_page.locator("#preflightError")).to_have_text("")
