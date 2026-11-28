@@ -83,3 +83,14 @@ assert.throws(()=>C.validate({...both,durationMode:'duration'}));
 assert.throws(()=>C.validate({...both,pace:3}));
 assert.equal(C.maxSampleSeconds(both),Math.round(2.1*(6+20/60)*60));
 console.log('PASS: independent local parameter sweeps, amplitude scaling, time bounds and replay');
+
+const hashVectors=[["","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],["abc","ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],["a".repeat(1000000),"cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"]];
+for(const [v,h] of hashVectors)assert.equal(C.sha256(v),h);
+assert.equal(C.sha256("合成研究\n"),require('node:crypto').createHash('sha256').update("合成研究\n").digest('hex'));
+const quality=C.validateResearchRows(a);
+assert.equal(quality.passed,true);assert.equal(quality.row_count,721);assert.ok(quality.distance_residual_m<1e-8);
+const bad=JSON.parse(JSON.stringify(a));bad.rows[5].step_length_m+=1;assert.equal(C.validateResearchRows(bad).passed,false);
+const analysis=C.analysisRows(a,5);assert.equal(analysis.length,145);assert.equal(analysis.at(-1).t,a.rows.at(-1).t);assert.ok(analysis.every(r=>r.analysis_view&&r.synthetic));assert.ok(a.rows.every(r=>!('analysis_view' in r)));
+assert.throws(()=>C.analysisRows({...a,position_source:'synthetic_map_reference'},5));
+const comp=C.compareResearchGroups([{id:'a',label:'A',sessions:[a,z]},{id:'b',label:'B',sessions:[z]}]);assert.equal(comp[0].n,2);assert.equal(comp[0].valid_count,2);assert.equal(comp[1].rms_error_m.mean,0);assert.throws(()=>C.compareResearchGroups([]));
+console.log('PASS: independent SHA256 vectors, row validation, immutable local analysis and archived-group comparison');
