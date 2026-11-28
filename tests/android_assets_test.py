@@ -560,6 +560,21 @@ try:
         assert len(capacity_backup["projects"])==50
         assert capacity_backup["unarchived_current"]["snapshot"]==json.loads(saved)
         local_page.close()
+        # A damaged draft must not be silently overwritten during startup.
+        damaged=browser.new_page(viewport={"width":390,"height":844},is_mobile=True,has_touch=True)
+        damaged.on("pageerror",lambda e: errors.append(str(e)))
+        damaged.add_init_script("""window.__exports=[];window.StrideAndroid={save:(name,mime,data)=>window.__exports.push({name,mime,data}),locate:()=>setTimeout(()=>window.StrideMapLocationError(),0)};if(!localStorage.getItem('injected_draft_test')){localStorage.setItem('stridelab.v0','{broken');localStorage.setItem('injected_draft_test','1');}""")
+        damaged.goto(f"http://127.0.0.1:{server.server_port}/index.html")
+        expect(damaged.locator("#draftWarning")).to_be_visible()
+        assert damaged.evaluate("localStorage.getItem('stridelab.v0')")=="{broken"
+        damaged.click("#exportRawDraft")
+        assert base64.b64decode(damaged.evaluate("window.__exports.at(-1).data")).decode()=="{broken"
+        damaged.click("#resetCorruptDraft")
+        assert damaged.evaluate("localStorage.getItem('stridelab.v0')")=="{broken"
+        damaged.click("#resetCorruptDraft")
+        expect(damaged.locator("#draftWarning")).to_be_hidden()
+        assert json.loads(damaged.evaluate("localStorage.getItem('stridelab.v0')"))["points"]
+        damaged.close()
         assert not errors, errors
         browser.close()
 finally:
