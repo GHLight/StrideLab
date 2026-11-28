@@ -53,6 +53,10 @@ try:
         expect(page.locator("#mapAdd")).to_be_enabled()
         page.click("#mapAdd")
         expect(page.locator("#mapCount")).to_have_text("3")
+        expect(page.locator("#mapUseShape")).to_be_visible()
+        expect(page.locator("#mapUseShape")).to_be_enabled()
+        expect(page.locator("#mapEditFold")).not_to_have_attribute("open","")
+        page.locator("#mapEditFold > summary").click()
         page.select_option("#mapNode","1")
         page.click("#mapNodeEarlier")
         expect(page.locator("#mapNode")).to_have_value("0")
@@ -65,6 +69,7 @@ try:
         page.select_option("#mapProvider","street")
         expect(page.locator("#mapAdd")).to_be_enabled()
 
+        page.locator("#mapStorageFold > summary").click()
         page.locator(".reference-library summary").click()
         page.fill("#referenceName","参考测试场地")
         page.click("#referenceFavorite")
