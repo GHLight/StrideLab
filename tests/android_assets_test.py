@@ -378,6 +378,14 @@ try:
         local_page.fill("#count","5")
         local_page.fill("#distance","2")
         local_page.fill("#distanceSpreadM","100")
+        # Open the advanced parameter section as a user would.
+        seed_details=local_page.locator("#seed").locator("xpath=ancestor::details")
+        if seed_details.count():
+            for j in reversed(range(seed_details.count())):
+                fold=seed_details.nth(j)
+                if not fold.evaluate("(el)=>el.open"):
+                    fold.locator("xpath=./summary").click()
+        expect(local_page.locator("#seed")).to_be_visible()
         local_page.fill("#seed","17")
         expect(local_page.locator("#preflightError")).to_have_text("")
         local_page.click("#generate")
