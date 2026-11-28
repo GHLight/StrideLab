@@ -110,6 +110,11 @@ try:
         page.fill("#scenarioDate","2030-12-31")
         page.fill("#scenarioTime","23:55")
         page.select_option("#scenarioZone","+08:00")
+        page.get_by_role("button",name="随机区间",exact=True).click()
+        expect(page.locator("#scenarioGapMin")).to_be_visible()
+        expect(page.get_by_role("button",name="随机区间",exact=True)).to_have_attribute("aria-pressed","true")
+        page.get_by_role("button",name="固定间隔",exact=True).click()
+        expect(page.locator("#scenarioGapMin")).to_be_hidden()
         page.fill("#scenarioDayGap","2")
         page.uncheck("#randomStart")
         page.fill("#fixedStart","30")
@@ -380,9 +385,11 @@ try:
         local_page.goto(f"http://127.0.0.1:{server.server_port}/index.html")
         local_page.locator('nav [data-go="sim"]').click()
         local_page.select_option("#positionMode","none")
+        assert local_page.evaluate("""() => {const c=config(),d=openedAt,p=n=>String(n).padStart(2,"0");return c.scenarioDate===d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())&&c.scenarioTime===p(d.getHours())+":"+p(d.getMinutes());}""")
         local_page.fill("#count","5")
         local_page.fill("#distance","2")
         local_page.fill("#distanceSpreadM","100")
+        local_page.fill("#paceSpreadSec","20")
         # Open the advanced parameter section as a user would.
         seed_details=local_page.locator("#seed").locator("xpath=ancestor::details")
         if seed_details.count():
@@ -412,10 +419,13 @@ try:
             assert len(set(targets))==5 and all(1900<=d<=2100 for d in targets)
             for i,s in enumerate(manifest["summary"]):
                 assert abs(s["model_distance_m"]-targets[i])<1e-6
-                assert s["seconds"]==round(targets[i]*6*60/1000)
+                assert 340 <= s["target_pace_sec_km"] <= 380
+                assert abs(s["seconds"]-targets[i]*s["target_pace_sec_km"]/1000)<=0.500001
+            assert len(set(s["target_pace_sec_km"] for s in manifest["summary"]))==5
         local_page.reload()
         local_page.locator('nav [data-go="sim"]').click()
         expect(local_page.locator("#distanceSpreadM")).to_have_value("100")
+        expect(local_page.locator("#paceSpreadSec")).to_have_value("20")
         local_page.locator('nav [data-go="files"]').click()
         local_page.click("#download")
         assert local_page.evaluate("window.__exports.at(-1).data")==sweep_export["data"]
