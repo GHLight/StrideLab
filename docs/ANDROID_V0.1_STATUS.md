@@ -1,3 +1,5 @@
+> 历史记录：此文描述最初归档状态。最新实现和实际验证边界见 [APP_COMPARISON.md](APP_COMPARISON.md)。
+
 # StrideLab v0.1.0 — integrated development build
 
 ## 运行方式
