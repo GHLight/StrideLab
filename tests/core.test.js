@@ -66,3 +66,20 @@ for(let i=0;i<sweep.count;i++)assert.equal(C.simulateResearch({...sweep,duration
 assert.throws(()=>C.validate({...sweep,durationMode:'duration',distanceSpreadM:2000}));
 assert.throws(()=>C.validate({...sweep,durationMode:'duration',pace:3}));
 console.log('PASS: fixed-duration local experiments and pace bounds');
+
+const both={...sweep,paceSpreadSec:20};
+const small={...both,paceSpreadSec:10};
+for(let i=0;i<both.count;i++){
+ const q=C.sampleConfig(both,i),r=C.sampleConfig(small,i),s=C.simulateResearch(both,p,true,i);
+ assert.ok(q.pace>=6-20/60&&q.pace<=6+20/60);
+ assert.ok(Math.abs((q.pace-6)-2*(r.pace-6))<1e-12);
+ assert.equal(q.distance,r.distance);
+ assert.equal(s.summary.seconds,Math.round(q.distance*q.pace*60));
+ assert.ok(Math.abs(s.summary.target_pace_sec_km-q.pace*60)<1e-9);
+ assert.deepEqual(s,C.simulateResearch(both,p,true,i));
+}
+assert.throws(()=>C.validate({...both,positionMode:'geo'}));
+assert.throws(()=>C.validate({...both,durationMode:'duration'}));
+assert.throws(()=>C.validate({...both,pace:3}));
+assert.equal(C.maxSampleSeconds(both),Math.round(2.1*(6+20/60)*60));
+console.log('PASS: independent local parameter sweeps, amplitude scaling, time bounds and replay');
