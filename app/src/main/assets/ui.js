@@ -209,8 +209,8 @@ $('helpBtn').onclick=()=> $('helpDialog').showModal();$('helpClose').onclick=()=
  fold(ref,'referenceExportFold','高级：保存和导出地图参考坐标');
  const mapCard=$('mapEnable').closest('.card');mapCard.querySelector('h3').textContent='① 地图标点';
  $('route').querySelector('h2').textContent='场地编辑';
- $('route').querySelector('p.muted').textContent='地图标点与参考路线预览。高级工具用于手动编辑或导出参考坐标。';
- const localNext=$('route').querySelector('button[data-go="sim"]');localNext.textContent='进入独立局部实验 →';localNext.classList.remove('primary');localNext.setAttribute('aria-label','进入独立局部实验，不自动使用地图标点');
+ $('route').querySelector('p.muted').textContent='地图标点 → 插值预览 → 确认参考路线。';
+ const localNext=$('route').querySelector('button[data-go="sim"]');localNext.textContent='进入独立局部实验 →';localNext.classList.remove('primary');localNext.setAttribute('aria-label','进入独立局部实验，不自动使用地图标点');$('manualRouteFold').append(localNext);
  const active=document.createElement('div');active.className='card';active.id='activeRouteCard';
  active.innerHTML='<h3>当前实验路线</h3><div class="canvas"><svg id="activeRoutePreview" viewBox="-125 -110 250 220" aria-label="当前研究路线预览"></svg></div><p id="activeRouteInfo" class="hint"></p><button id="changeActiveRoute" class="wide">返回场地修改路线</button>';
  $('sim').querySelector('p.muted').after(active);
